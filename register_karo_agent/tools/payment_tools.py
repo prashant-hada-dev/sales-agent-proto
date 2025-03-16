@@ -37,17 +37,17 @@ def generate_razorpay_link(customer_info: Dict[str, Any] = None) -> Dict[str, An
         if customer_info and customer_info.get("company_type"):
             company_type = customer_info.get("company_type", "").lower()
             if "llp" in company_type:
-                amount = 6000
+                amount = 5  # Changed from 6000 to 5 rupees
                 description = "Limited Liability Partnership (LLP) Registration"
             elif "opc" in company_type or "one person" in company_type:
-                amount = 4500
+                amount = 5  # Changed from 4500 to 5 rupees
                 description = "One Person Company (OPC) Registration"
             else:
-                amount = 5000
+                amount = 5  # Changed from 5000 to 5 rupees
                 description = "Private Limited Company Registration"
         else:
             # Default to Private Limited Company
-            amount = 5000
+            amount = 5  # Changed from 5000 to 5 rupees
             description = "Private Limited Company Registration"
         
         # Try to use actual Razorpay SDK if available
@@ -180,7 +180,7 @@ def check_payment_status(payment_id: str) -> Dict[str, Any]:
                         "payment_id": payment_id,
                         "status": status,
                         "payment_completed": payment_completed,
-                        "amount": 5000,
+                        "amount": 5,  # Changed from 5000 to 5 rupees
                         "currency": "INR"
                     }
                     
@@ -216,7 +216,7 @@ def check_payment_status(payment_id: str) -> Dict[str, Any]:
             "payment_id": payment_id,
             "status": status,
             "payment_completed": payment_completed,
-            "amount": 5000,
+            "amount": 5,  # Changed from 5000 to 5 rupees
             "currency": "INR"
         }
         

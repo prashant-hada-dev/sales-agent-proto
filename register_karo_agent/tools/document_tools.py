@@ -76,7 +76,7 @@ async def verify_document_with_vision(document_url: str) -> Dict[str, Any]:
                                 },
                                 {
                                     "type": "input_text",
-                                    "text": "Analyze this document and check if it's a valid ID/document with clear information. Check for: 1) Document type 2) Clarity of text 3) Presence of required fields like name, ID number, date 4) Any issues that might cause rejection"
+                                    "text": "You are an advanced document verification expert. Analyze this identity document in detail:\n\n1) Document type (Aadhaar, PAN card, passport, driver's license, etc.)\n2) Document quality assessment (clarity, lighting, completeness)\n3) Verify presence of critical information (name, ID number, date of birth/issue)\n4) Detect any signs of tampering or manipulation\n5) Check if the document meets official format requirements\n\nProvide a comprehensive assessment of whether this document is valid for company registration purposes in India. Be extremely specific about any issues found."
                                 },
                             ],
                         },
@@ -93,8 +93,8 @@ async def verify_document_with_vision(document_url: str) -> Dict[str, Any]:
                             "role": "user",
                             "content": [
                                 {
-                                    "type": "text", 
-                                    "text": "Analyze this document and check if it's a valid ID/document with clear information. Check for: 1) Document type 2) Clarity of text 3) Presence of required fields like name, ID number, date 4) Any issues that might cause rejection"
+                                    "type": "text",
+                                    "text": "You are an advanced document verification expert. Analyze this identity document in detail:\n\n1) Document type (Aadhaar, PAN card, passport, driver's license, etc.)\n2) Document quality assessment (clarity, lighting, completeness)\n3) Verify presence of critical information (name, ID number, date of birth/issue)\n4) Detect any signs of tampering or manipulation\n5) Check if the document meets official format requirements\n\nProvide a comprehensive assessment of whether this document is valid for company registration purposes in India. Be extremely specific about any issues found."
                                 },
                                 {
                                     "type": "image_url",
@@ -121,8 +121,17 @@ async def verify_document_with_vision(document_url: str) -> Dict[str, Any]:
         logger.info(f"Document analysis: {analysis}")
         
         # Determine if document is valid based on analysis
-        # This is a simple heuristic - in a production system, this would be more sophisticated
-        is_valid = "valid" in analysis.lower() and "clear" in analysis.lower() and not "blurry" in analysis.lower()
+        # Enhanced validation logic to better detect valid documents and reduce false negatives
+        is_valid = (
+            # Look for positive indicators
+            ("valid" in analysis.lower() or "acceptable" in analysis.lower() or "good quality" in analysis.lower()) and
+            # Check for clarity indicators
+            ("clear" in analysis.lower() or "legible" in analysis.lower() or "readable" in analysis.lower()) and
+            # Reject only if explicitly mentioned problems
+            not any(issue in analysis.lower() for issue in ["blurry", "unclear", "cannot read", "illegible", "fake", "forged", "manipulated"])
+        )
+        
+        logger.info(f"Document validation result: {is_valid}, based on analysis: {analysis[:100]}...")
         
         if is_valid:
             logger.info("Document verified successfully")

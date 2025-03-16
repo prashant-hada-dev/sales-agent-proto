@@ -120,14 +120,23 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
     
     # Run the agent
     try:
-        # Prepare context from chat history
-        context = "\n".join([f"{m['role']}: {m['content']}" for m in chat_histories[session_id][-5:]])
+        # Prepare context from chat history with metadata if available
+        context_lines = []
+        for m in chat_histories[session_id][-5:]:
+            if "metadata" in m:
+                # Include metadata in a structured way
+                metadata_str = "\n".join([f"  {k}: {v}" for k, v in m["metadata"].items()])
+                context_lines.append(f"{m['role']} (with metadata):\nMessage: {m['content']}\nMetadata:\n{metadata_str}")
+            else:
+                context_lines.append(f"{m['role']}: {m['content']}")
+        
+        context = "\n".join(context_lines)
         
         # Add user info to context if available
         if session_id in user_info:
             context += f"\nUser info: {json.dumps(user_info[session_id])}"
         
-        # Add document status to context if available  
+        # Add document status to context if available
         if session_id in document_status:
             context += f"\nDocument status: {json.dumps(document_status[session_id])}"
             
@@ -135,12 +144,43 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
         if session_id in payment_status:
             context += f"\nPayment status: {json.dumps(payment_status[session_id])}"
         
+        # Create the prompt with agent-specific instructions
+        agent_type = "sales"
+        if session_id in document_status and document_status[session_id].get("pending", False):
+            agent_type = "document verification"
+        elif session_id in payment_status and payment_status[session_id].get("pending", False):
+            agent_type = "payment"
+            
         # Create the prompt
-        prompt = f"Context:\n{context}\n\nUser's latest message: {message}\n\nRespond as an aggressive sales agent."
+        prompt = f"Context:\n{context}\n\nUser's latest message: {message}\n\nRespond as a {agent_type} agent."
         
-        # Run the agent
-        logger.info(f"Running agent with prompt: {prompt[:100]}...")
-        result = await Runner.run(agent_to_use, input=prompt)
+        # Prepare tool parameters for document verification and payment agents
+        tool_params = {}
+        
+        # For payment agent, include payment info
+        if agent_type == "payment" and session_id in payment_status:
+            payment_info = payment_status[session_id]
+            if "payment_id" in payment_info:
+                tool_params["payment_id"] = payment_info["payment_id"]
+            if "link" in payment_info:
+                tool_params["payment_link"] = payment_info["link"]
+            
+        # For document agent, include document info
+        if agent_type == "document verification" and session_id in document_status:
+            doc_info = document_status[session_id]
+            if "file_path" in doc_info:
+                tool_params["document_path"] = doc_info["file_path"]
+            if "analysis" in doc_info:
+                tool_params["analysis"] = doc_info["analysis"]
+        
+        # Run the agent with tool parameters if available
+        logger.info(f"Running {agent_type} agent with prompt: {prompt[:100]}...")
+        if tool_params:
+            logger.info(f"Including tool parameters: {tool_params}")
+            result = await Runner.run(agent_to_use, input=prompt, tool_params=tool_params)
+        else:
+            result = await Runner.run(agent_to_use, input=prompt)
+            
         response = result.final_output
         logger.info(f"Agent response: {response[:100]}...")
         
@@ -260,36 +300,105 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
         await send_bot_message(websocket, "I'm having trouble processing your request. Please try again.")
 
 async def handle_inactivity(session_id: str, websocket: WebSocket, context: Optional[str] = None):
-    """Handle user inactivity with follow-ups."""
+    """Handle user inactivity with AI-generated follow-ups based on conversation context."""
     if session_id not in chat_histories:
         return
     
     logger.info(f"Handling inactivity for session {session_id}")
     
-    # Get the last few messages
-    last_messages = chat_histories[session_id][-3:]
+    # Determine which agent to use based on conversation state
+    agent_to_use = sales_agent  # Default to sales agent
+    agent_type = "sales"
     
-    # Determine appropriate follow-up based on conversation state
-    follow_up_message = "Just checking in - are you still there? I'm here to help with your company registration. Remember, our special offer is valid only for today!"
-    
-    # If we're at the document stage
+    # If we're at the document verification stage
     if session_id in document_status and document_status[session_id].get("pending", False):
-        follow_up_message = "I noticed you haven't uploaded your document yet. This is an important step to secure your company registration. Can I help with any questions about the document requirements? Remember, we need this to proceed quickly with your incorporation."
+        agent_to_use = document_verification_agent
+        agent_type = "document verification"
     
     # If we're at the payment stage
     elif session_id in payment_status and payment_status[session_id].get("pending", False):
-        follow_up_message = "I noticed you haven't completed the payment yet. This special discount offer is only valid for a limited time. Would you like me to guide you through the payment process? It's very simple and secure."
+        agent_to_use = payment_agent
+        agent_type = "payment"
     
-    # If context is 'payment_pending', override with more urgent message
-    if context == 'payment_pending':
-        follow_up_message = "Your payment is pending, and your registration slot is at risk! Our special promotion price is only valid for the next few minutes. Is there any payment issue I can help you resolve right now?"
-    
-    # Add to chat history
-    chat_histories[session_id].append({"role": "assistant", "content": follow_up_message})
-    
-    # Send follow-up message
-    if websocket.client_state == WebSocketState.CONNECTED:
-        await send_bot_message(websocket, follow_up_message, "follow_up")
+    try:
+        # Prepare context from chat history (use last 5 messages for relevant context)
+        context_lines = []
+        for m in chat_histories[session_id][-5:]:
+            if "metadata" in m:
+                # Include metadata in a structured way
+                metadata_str = "\n".join([f"  {k}: {v}" for k, v in m["metadata"].items()])
+                context_lines.append(f"{m['role']} (with metadata):\nMessage: {m['content']}\nMetadata:\n{metadata_str}")
+            else:
+                context_lines.append(f"{m['role']}: {m['content']}")
+        
+        conversation_context = "\n".join(context_lines)
+        
+        # Add user info to context if available
+        if session_id in user_info:
+            conversation_context += f"\nUser info: {json.dumps(user_info[session_id])}"
+        
+        # Add document status to context if available
+        if session_id in document_status:
+            conversation_context += f"\nDocument status: {json.dumps(document_status[session_id])}"
+            
+        # Add payment status to context if available
+        if session_id in payment_status:
+            conversation_context += f"\nPayment status: {json.dumps(payment_status[session_id])}"
+        
+        # Special context information for specific scenarios
+        additional_context = ""
+        if context == 'payment_pending':
+            additional_context = "\nUrgent: User has left the payment page open but hasn't completed payment for over 30 seconds."
+        
+        # Time since last user message
+        time_inactive = "30 seconds"  # Default value, could be calculated from timestamps
+        
+        # Create the inactivity prompt
+        inactivity_prompt = f"""
+Context:
+{conversation_context}
+
+Additional Information:
+- User has been inactive for {time_inactive}
+- Current stage: {agent_type} phase
+{additional_context}
+
+You are a {agent_type} agent for RegisterKaro company registration service.
+The user hasn't responded for a while.
+
+Generate a natural, contextually relevant follow-up message that:
+1. Acknowledges their inactivity
+2. Relates specifically to their previous messages and the current stage of their registration
+3. Encourages them to continue the process
+4. Creates appropriate urgency (stronger urgency for payment stage)
+5. Is friendly but professional
+
+Your follow-up message:
+"""
+        
+        # Run the agent to generate the follow-up
+        logger.info(f"Generating context-aware follow-up with {agent_type} agent...")
+        result = await Runner.run(agent_to_use, input=inactivity_prompt)
+        follow_up_message = result.final_output
+        
+        logger.info(f"AI-generated follow-up: {follow_up_message[:50]}...")
+        
+        # Add to chat history
+        chat_histories[session_id].append({
+            "role": "assistant",
+            "content": follow_up_message,
+            "metadata": {"type": "inactivity_follow_up", "context": context or "general"}
+        })
+        
+        # Send follow-up message
+        if websocket.client_state == WebSocketState.CONNECTED:
+            await send_bot_message(websocket, follow_up_message, "follow_up")
+            
+    except Exception as e:
+        logger.error(f"Error generating inactivity follow-up: {str(e)}", exc_info=True)
+        # Fallback to simple message if AI generation fails
+        fallback_message = "Just checking in - are you still there? I'm here to help with your company registration."
+        await send_bot_message(websocket, fallback_message, "follow_up")
 
 # Routes
 @app.get("/", response_class=HTMLResponse)
@@ -463,11 +572,19 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
                     # Create a detailed rejection message
                     rejection_message = f"I've reviewed your document, but there seems to be an issue: {verification_result['analysis']}\n\nWe need a valid identity document (like Aadhaar, PAN card, or passport) that clearly shows your name and other details. This is a critical step for your company registration process. Could you please upload a proper identity document? It will only take a moment and ensures we can proceed with your registration without any delays."
                     
-                    # Add the message to chat history to maintain context
+                    # Add the document analysis to payment agent context
                     if actual_session_id not in chat_histories:
                         chat_histories[actual_session_id] = []
                     
-                    chat_histories[actual_session_id].append({"role": "assistant", "content": rejection_message})
+                    # Store both the rejection message and detailed document analysis
+                    chat_histories[actual_session_id].append({
+                        "role": "assistant",
+                        "content": rejection_message,
+                        "metadata": {
+                            "document_analysis": verification_result['analysis'],
+                            "document_status": "rejected"
+                        }
+                    })
                     
                     # Send the rejection message with enhanced logging
                     if websocket.client_state == WebSocketState.CONNECTED:
@@ -484,10 +601,31 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
                             # Brief delay to ensure message is processed
                             await asyncio.sleep(0.5)
                             
+                            # Extract specific issues to guide the user better
+                            issues = []
+                            if "blurry" in verification_result['analysis'].lower():
+                                issues.append("Image is too blurry")
+                            if "dark" in verification_result['analysis'].lower():
+                                issues.append("Image is too dark")
+                            if "cropped" in verification_result['analysis'].lower() or "cut off" in verification_result['analysis'].lower():
+                                issues.append("Document is partially cropped or cut off")
+                            if "glare" in verification_result['analysis'].lower() or "reflection" in verification_result['analysis'].lower():
+                                issues.append("There's glare or reflection on the document")
+                            
+                            # If specific issues were identified, send follow-up advice
+                            if issues:
+                                specific_advice = "Here are some tips for a better upload:\n" + "\n".join([f"- {issue}" for issue in issues])
+                                specific_advice += "\n\nPlease ensure good lighting, no glare, and that the entire document is visible."
+                                
+                                await send_bot_message(
+                                    websocket,
+                                    specific_advice
+                                )
+                            
                             # Request another document upload
                             await request_document_upload(websocket)
                             
-                            logger.info(f"Document verification failed for session {actual_session_id}. Requested new document upload.")
+                            logger.info(f"Document verification failed for session {actual_session_id}. Requested new document upload. Issues: {issues}")
                         except Exception as message_error:
                             logger.error(f"Error sending document verification message: {str(message_error)}", exc_info=True)
                     else:

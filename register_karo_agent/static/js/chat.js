@@ -23,9 +23,20 @@ document.addEventListener('DOMContentLoaded', function() {
     let typingTimer = null;
     let inactivityTimer = null;
     let retryCount = 0;
+    let followUpCount = 0;
     const maxRetries = 3;
-    const inactivityTimeout = 30000; // 30 seconds
+    const maxFollowUps = 5; // Maximum number of follow-ups before backing off
+    const baseInactivityTimeout = 120000; // 2 minutes initial timeout
     const reconnectInterval = 3000; // 3 seconds
+    
+    // Progressive timeouts that increase with each follow-up
+    const inactivityTimeouts = [
+        120000, // 2 minutes for first follow-up
+        180000, // 3 minutes for second follow-up
+        300000, // 5 minutes for third follow-up
+        600000, // 10 minutes for fourth follow-up
+        900000  // 15 minutes for fifth and subsequent follow-ups
+    ];
 
     // Helper Functions
     function formatTime() {
@@ -105,7 +116,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (data.type === 'message' || data.type === 'follow_up') {
                 console.log('Adding message to chat:', data.text.substring(0, 50) + '...');
                 addMessage(data.text, 'bot', data.type);
-                resetInactivityTimer();
+                resetFollowUpCount();
             } else if (data.type === 'show_document_upload') {
                 showDocumentUploadForm();
             } else if (data.type === 'payment_link') {
@@ -160,25 +171,49 @@ document.addEventListener('DOMContentLoaded', function() {
     function resetInactivityTimer() {
         clearTimeout(inactivityTimer);
         
-        inactivityTimer = setTimeout(() => {
-            if (socket && socket.readyState === WebSocket.OPEN && sessionId) {
-                console.log('User inactive, sending follow-up');
-                
-                // Check if payment area is visible to determine context
-                let context = null;
-                if (paymentArea.style.display === 'block') {
-                    context = 'payment_pending';
+        // Only set a new timer if we haven't reached max follow-ups
+        if (followUpCount < maxFollowUps) {
+            // Get the appropriate timeout based on follow-up count
+            const timeout = inactivityTimeouts[Math.min(followUpCount, inactivityTimeouts.length - 1)];
+            
+            console.log(`Setting inactivity timer: ${timeout/1000} seconds (follow-up #${followUpCount + 1})`);
+            
+            inactivityTimer = setTimeout(() => {
+                if (socket && socket.readyState === WebSocket.OPEN && sessionId) {
+                    console.log(`User inactive for ${timeout/1000} seconds, sending follow-up #${followUpCount + 1}`);
+                    
+                    // Check if payment area is visible to determine context
+                    let context = null;
+                    if (paymentArea.style.display === 'block') {
+                        context = 'payment_pending';
+                    }
+                    
+                    // Include follow-up count in the message to help server tailor response
+                    const inactiveMsg = {
+                        type: 'inactive',
+                        session_id: sessionId,
+                        context: context,
+                        follow_up_count: followUpCount
+                    };
+                    
+                    socket.send(JSON.stringify(inactiveMsg));
+                    
+                    // Increment follow-up count for next time
+                    followUpCount++;
                 }
-                
-                const inactiveMsg = {
-                    type: 'inactive',
-                    session_id: sessionId,
-                    context: context
-                };
-                
-                socket.send(JSON.stringify(inactiveMsg));
-            }
-        }, inactivityTimeout);
+            }, timeout);
+        } else {
+            console.log(`Maximum follow-ups (${maxFollowUps}) reached. No more follow-ups will be sent.`);
+        }
+    }
+    
+    // Reset follow-up count when user interacts
+    function resetFollowUpCount() {
+        if (followUpCount > 0) {
+            console.log(`Resetting follow-up count from ${followUpCount} to 0 due to user activity`);
+            followUpCount = 0;
+        }
+        resetInactivityTimer();
     }
 
     function showDocumentUploadForm() {
@@ -203,13 +238,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add a message showing that payment is being initialized
         addMessage("Opening secure payment gateway...", 'bot');
         
-        // Use the Razorpay test key - this would be replaced with the actual key in production
+        // Use the Razorpay test key
         const razorpayKey = 'rzp_test_I98HfDwdi2qQ3T';
         
         // Get customer information if available (using defaults if not)
         const options = {
             key: razorpayKey,
-            amount: 500000, // Amount in paise (₹5,000)
+            amount: 500, // Amount in paise (₹5)
             currency: 'INR',
             name: 'RegisterKaro',
             description: 'Private Limited Company Registration',
@@ -223,9 +258,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 checkPaymentStatus(paymentId);
             },
             prefill: {
-                name: '',
-                email: '',
-                contact: ''
+                name: 'Test User',
+                email: 'test@example.com',
+                contact: '9999999999'
             },
             notes: {
                 payment_id: paymentId
@@ -236,6 +271,24 @@ document.addEventListener('DOMContentLoaded', function() {
             modal: {
                 ondismiss: function() {
                     addMessage("Payment process was cancelled. You can try again when you're ready.", 'bot');
+                }
+            },
+            config: {
+                display: {
+                    blocks: {
+                        utib: { // UPI payment block
+                            name: "Pay using UPI",
+                            instruments: [
+                                {
+                                    method: "upi"
+                                }
+                            ]
+                        }
+                    },
+                    sequence: ["block.utib"],
+                    preferences: {
+                        show_default_blocks: false
+                    }
                 }
             }
         };
@@ -254,7 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
             connectWebSocket();
         }
         
-        resetInactivityTimer();
+        resetFollowUpCount();
         messageInput.focus();
     });
 
@@ -272,7 +325,7 @@ document.addEventListener('DOMContentLoaded', function() {
             connectWebSocket();
         }
         
-        resetInactivityTimer();
+        resetFollowUpCount();
         messageInput.focus();
     });
 
@@ -309,7 +362,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 sendMessageToServer(serviceMessage);
             }, 1000);
             
-            resetInactivityTimer();
+            resetFollowUpCount();
             messageInput.focus();
         });
     });
@@ -347,7 +400,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 sendMessageToServer(planMessage);
             }, 1000);
             
-            resetInactivityTimer();
+            resetFollowUpCount();
             messageInput.focus();
         });
     });
@@ -359,7 +412,7 @@ document.addEventListener('DOMContentLoaded', function() {
             addMessage(text, 'user');
             sendMessageToServer(text);
             messageInput.value = '';
-            resetInactivityTimer();
+            resetFollowUpCount();
         }
     });
 
@@ -369,12 +422,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Reset inactivity timer when user is typing
-        resetInactivityTimer();
+        resetFollowUpCount();
     });
 
     fileInput.addEventListener('change', function() {
         if (this.files.length > 0) {
-            fileName.textContent = this.files[0].name;
+            const file = this.files[0];
+            fileName.textContent = file.name;
+            
+            // Validate file type
+            const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+            if (!validTypes.includes(file.type)) {
+                addMessage("Please upload only images (JPEG, PNG, GIF, WEBP) or PDF files.", 'bot');
+                fileInput.value = '';
+                fileName.textContent = 'No file chosen';
+            }
+            
+            // Validate file size (max 5MB)
+            const maxSize = 5 * 1024 * 1024; // 5MB
+            if (file.size > maxSize) {
+                addMessage("The file is too large. Please upload a file smaller than 5MB.", 'bot');
+                fileInput.value = '';
+                fileName.textContent = 'No file chosen';
+            }
         } else {
             fileName.textContent = 'No file chosen';
         }
@@ -384,12 +454,13 @@ document.addEventListener('DOMContentLoaded', function() {
         e.preventDefault();
         
         if (fileInput.files.length === 0) {
-            alert('Please select a file to upload');
+            addMessage('Please select a file to upload', 'bot');
             return;
         }
         
+        const file = fileInput.files[0];
         const formData = new FormData();
-        formData.append('document', fileInput.files[0]);
+        formData.append('document', file);
         
         // Use the server's session ID if available, otherwise fall back to client's ID
         const uploadSessionId = serverSessionId || sessionId;
@@ -398,13 +469,26 @@ document.addEventListener('DOMContentLoaded', function() {
         formData.append('session_id', uploadSessionId);
         
         try {
+            // Disable the form during upload
+            const submitButton = documentUploadForm.querySelector('button[type="submit"]');
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+            
             // Show uploading status message
-            addMessage("Uploading your document... Please wait.", 'bot');
+            addMessage(`Uploading ${file.name}... Please wait.`, 'bot');
             
             const response = await fetch('/upload-document', {
                 method: 'POST',
                 body: formData
             });
+            
+            // Re-enable the form
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Upload Document';
+            
+            if (!response.ok) {
+                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            }
             
             const result = await response.json();
             console.log('Document upload result:', result);
@@ -412,13 +496,23 @@ document.addEventListener('DOMContentLoaded', function() {
             if (result.success) {
                 addMessage("Document uploaded successfully! Our specialist will verify it shortly.", 'bot');
                 documentUploadArea.style.display = 'none';
+                
+                // Reset the form
+                fileInput.value = '';
+                fileName.textContent = 'No file chosen';
+                
                 // The verification result will come via WebSocket message
             } else {
-                addMessage(`Error uploading document: ${result.error}`, 'bot');
+                addMessage(`Error uploading document: ${result.error || 'Unknown error'}`, 'bot');
             }
         } catch (error) {
             console.error('Error uploading document:', error);
-            addMessage('There was an error uploading your document. Please try again.', 'bot');
+            addMessage(`Upload failed: ${error.message || 'Please check your connection and try again.'}`, 'bot');
+            
+            // Re-enable the form if it wasn't already
+            const submitButton = documentUploadForm.querySelector('button[type="submit"]');
+            submitButton.disabled = false;
+            submitButton.innerHTML = 'Upload Document';
         }
     });
 
