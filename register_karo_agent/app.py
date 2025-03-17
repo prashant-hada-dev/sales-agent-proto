@@ -435,17 +435,6 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
             if user_data and "short_context" in user_data and "Lang: Hinglish" in user_data["short_context"]:
                 language_preference = "Hinglish"
             
-        # Create the prompt with language preference
-        prompt = f"""Context:
-{context}
-
-User's latest message: {message}
-
-Respond as a {agent_type} agent.
-Language preference: {language_preference}.
-If language preference is Hinglish, respond in conversational Hindi-English mixed language, using a natural and friendly tone like a human CA would speak to a client from North India.
-"""
-        
         # Prepare tool parameters for document verification and payment agents
         tool_params = {}
         
@@ -511,13 +500,27 @@ If language preference is Hinglish, respond in conversational Hindi-English mixe
                 thread_ids[session_id] = thread_id
                 logger.info(f"Created new thread ID in memory: {thread_id}")
         
+        # Create the prompt with language preference and session ID
+        prompt = f"""Context:
+{context}
+
+User's latest message: {message}
+
+Session ID: {session_id}
+Thread ID: {thread_id}
+
+Respond as a {agent_type} agent.
+Language preference: {language_preference}.
+If language preference is Hinglish, respond in conversational Hindi-English mixed language, using a natural and friendly tone like a human CA would speak to a client from North India.
+"""
+        
         # Run the agent with tool parameters if available
-        logger.info(f"Running {agent_type} agent with prompt: {prompt[:100]}... using thread ID: {thread_id}")
+        logger.info(f"Running {agent_type} agent for session: {session_id} (thread ID: {thread_id})")
         if tool_params:
             logger.info(f"Including tool parameters: {tool_params}")
-            result = await Runner.run(agent_to_use, input=prompt, tool_params=tool_params, thread_id=thread_id)
+            result = await Runner.run(agent_to_use, input=prompt, tool_params=tool_params)
         else:
-            result = await Runner.run(agent_to_use, input=prompt, thread_id=thread_id)
+            result = await Runner.run(agent_to_use, input=prompt)
             
         response = result.final_output
         logger.info(f"Agent response: {response[:100]}...")
@@ -800,28 +803,6 @@ async def handle_inactivity(session_id: str, websocket: WebSocket, context: Opti
         # Time since last user message
         time_inactive = "30 seconds"  # Default value, could be calculated from timestamps
         
-        # Create the inactivity prompt
-        inactivity_prompt = f"""
-Context:
-{conversation_context}
-
-Additional Information:
-- User has been inactive for {time_inactive}
-- Current stage: {agent_type} phase
-{additional_context}
-
-You are a {agent_type} agent for RegisterKaro company registration service.
-The user hasn't responded for a while.
-
-Generate a natural, contextually relevant follow-up message that:
-1. Acknowledges their inactivity
-2. Relates specifically to their previous messages and the current stage of their registration
-3. Encourages them to continue the process
-4. Creates appropriate urgency (stronger urgency for payment stage)
-5. Is friendly but professional
-
-Your follow-up message:
-"""
         
         # Get thread ID for this session - ensure we use the same thread for follow-ups
         thread_id = None
@@ -847,9 +828,34 @@ Your follow-up message:
                 thread_ids[session_id] = thread_id
                 logger.info(f"Created new thread ID for follow-up: {thread_id}")
         
+        # Create the inactivity prompt
+        inactivity_prompt = f"""
+Context:
+{conversation_context}
+
+Additional Information:
+- User has been inactive for {time_inactive}
+- Current stage: {agent_type} phase
+- Session ID: {session_id}
+- Thread ID: {thread_id}
+{additional_context}
+
+You are a {agent_type} agent for RegisterKaro company registration service.
+The user hasn't responded for a while.
+
+Generate a natural, contextually relevant follow-up message that:
+1. Acknowledges their inactivity
+2. Relates specifically to their previous messages and the current stage of their registration
+3. Encourages them to continue the process
+4. Creates appropriate urgency (stronger urgency for payment stage)
+5. Is friendly but professional
+
+Your follow-up message:
+"""
+        
         # Run the agent to generate the follow-up
-        logger.info(f"Generating context-aware follow-up with {agent_type} agent using thread ID: {thread_id}...")
-        result = await Runner.run(agent_to_use, input=inactivity_prompt, thread_id=thread_id)
+        logger.info(f"Generating context-aware follow-up with {agent_type} agent for session: {session_id} (thread ID: {thread_id})")
+        result = await Runner.run(agent_to_use, input=inactivity_prompt)
         follow_up_message = result.final_output
         
         logger.info(f"AI-generated follow-up: {follow_up_message[:50]}...")
