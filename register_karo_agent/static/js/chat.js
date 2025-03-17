@@ -1,4 +1,4 @@
- document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function() {
     // DOM Elements
     const chatWidget = document.getElementById('chat-widget');
     const chatBubble = document.getElementById('chat-bubble');
@@ -43,6 +43,7 @@
     // Variables
     let sessionId = null;
     let serverSessionId = null; // Store the server's assigned session ID
+    let cookieId = null; // Store the cookie ID for user tracking
     let socket = null;
     let typingTimer = null;
     let inactivityTimer = null;
@@ -118,19 +119,56 @@
             // Get device info for tracking
             const deviceInfo = getDeviceInfo();
             
+            // Send cookie ID if we have one
+            if (cookieId) {
+                socket.send(JSON.stringify({
+                    type: 'cookie_id',
+                    cookie_id: cookieId
+                }));
+                updateDebug(`Sent cookie ID: ${cookieId}`);
+            }
+            
             // If we have a session ID from a previous connection, include it
             if (sessionId) {
                 const reconnectMsg = {
                     type: 'message',
                     text: 'Reconnected to chat',
-                    session_id: sessionId,
+                    previous_session_id: sessionId,
                     device_info: deviceInfo
                 };
+                
+                // Include cookie ID if available
+                if (cookieId) {
+                    reconnectMsg.cookie_id = cookieId;
+                }
+                
                 socket.send(JSON.stringify(reconnectMsg));
                 updateDebug(`Sent reconnection message with session ID: ${sessionId}`);
             } else {
                 // For new sessions, we'll just wait for the server to assign us a session ID
                 // and then we'll update our tracking info with the next message
+                
+                // Send client info to help server identify returning users
+                const clientInfo = {
+                    device: deviceInfo
+                };
+                
+                // Send additional user info if available (from localStorage)
+                let userInfo;
+                try {
+                    userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                    if (userInfo.name) clientInfo.name = userInfo.name;
+                    if (userInfo.email) clientInfo.email = userInfo.email;
+                    if (userInfo.phone) clientInfo.phone = userInfo.phone;
+                } catch (e) {
+                    console.error('Error parsing user info:', e);
+                }
+                
+                socket.send(JSON.stringify({
+                    type: 'client_info',
+                    client_info: clientInfo,
+                    cookie_id: cookieId
+                }));
                 
                 // Send initial greeting on first connection
                 setTimeout(() => {
@@ -150,6 +188,31 @@
                     // Store the server's session ID
                     serverSessionId = data.session_id;
                     updateDebug(`Received server session ID: ${serverSessionId}`);
+                    
+                    // Check if the server needs us to send a cookie
+                    if (data.requires_cookie) {
+                        // Send cookie ID if we have one, otherwise tell server we don't have one
+                        socket.send(JSON.stringify({
+                            type: 'cookie_id',
+                            cookie_id: cookieId || ''
+                        }));
+                        updateDebug(`Sent cookie_id response: ${cookieId || '(none)'}`);
+                    }
+                } else if (data.type === 'set_cookie') {
+                    // Server is asking us to set a new cookie
+                    cookieId = data.cookie_id;
+                    setCookie('registerKaroCookieId', cookieId, cookieLifetime);
+                    updateDebug(`Set new cookie ID: ${cookieId}`);
+                    
+                    // Also store in user info for redundancy
+                    let userInfo;
+                    try {
+                        userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                        userInfo.cookieId = cookieId;
+                        localStorage.setItem('userInfo', JSON.stringify(userInfo));
+                    } catch (e) {
+                        console.error('Error updating user info with cookie:', e);
+                    }
                 } else if (data.type === 'message' || data.type === 'follow_up') {
                     updateDebug(`Adding message to chat: ${data.text.substring(0, 30)}...`);
                     addMessage(data.text, 'bot', data.type);
@@ -218,8 +281,15 @@
         };
         
         // Add session ID if we have one
-        if (sessionId) {
-            message.session_id = sessionId;
+        if (serverSessionId) {
+            message.session_id = serverSessionId;
+        } else if (sessionId) {
+            message.previous_session_id = sessionId;
+        }
+        
+        // Add cookie ID if we have one
+        if (cookieId) {
+            message.cookie_id = cookieId;
         }
         
         updateDebug(`Sending message to server: ${text.substring(0, 30)}...`);
@@ -238,7 +308,7 @@
             updateDebug(`Setting inactivity timer: ${timeout/1000} seconds (follow-up #${followUpCount + 1})`);
             
             inactivityTimer = setTimeout(() => {
-                if (socket && socket.readyState === WebSocket.OPEN && sessionId) {
+                if (socket && socket.readyState === WebSocket.OPEN && serverSessionId) {
                     updateDebug(`User inactive for ${timeout/1000} seconds, sending follow-up #${followUpCount + 1}`);
                     
                     // Check if payment area is visible to determine context
@@ -250,10 +320,15 @@
                     // Include follow-up count in the message to help server tailor response
                     const inactiveMsg = {
                         type: 'inactive',
-                        session_id: sessionId,
+                        session_id: serverSessionId,
                         context: context,
                         follow_up_count: followUpCount
                     };
+                    
+                    // Include cookie ID if we have one
+                    if (cookieId) {
+                        inactiveMsg.cookie_id = cookieId;
+                    }
                     
                     socket.send(JSON.stringify(inactiveMsg));
                     
@@ -563,8 +638,13 @@
         // Use the server's session ID if available, otherwise fall back to client's ID
         const uploadSessionId = serverSessionId || sessionId;
         updateDebug(`Using session ID for document upload: ${uploadSessionId}`);
-        
         formData.append('session_id', uploadSessionId);
+        
+        // Add cookie ID if available
+        if (cookieId) {
+            formData.append('cookie_id', cookieId);
+            updateDebug(`Including cookie ID with document upload: ${cookieId}`);
+        }
         
         try {
             // Disable the form during upload
@@ -652,9 +732,16 @@
             
             // Use the server's session ID if available, otherwise fall back to client's ID
             const paymentSessionId = serverSessionId || sessionId;
-            updateDebug(`Using session ID for payment check: ${paymentSessionId}`);
+            let url = `/check-payment/${paymentId}?session_id=${paymentSessionId}`;
             
-            const response = await fetch(`/check-payment/${paymentId}?session_id=${paymentSessionId}`);
+            // Add cookie ID if available
+            if (cookieId) {
+                url += `&cookie_id=${cookieId}`;
+                updateDebug(`Including cookie ID with payment check: ${cookieId}`);
+            }
+            
+            updateDebug(`Checking payment status at: ${url}`);
+            const response = await fetch(url);
             const result = await response.json();
             
             updateDebug(`Payment status check: ${JSON.stringify(result)}`);
@@ -873,6 +960,10 @@
 
     // Initialize
     function initChat() {
+        // Try to get cookie ID first (for user identification)
+        cookieId = getCookie('registerKaroCookieId');
+        updateDebug(`Initial cookie ID: ${cookieId || 'not found'}`);
+        
         // Try to get session ID from cookie with enhanced persistence
         sessionId = getCookie('chatSessionId');
         
@@ -913,6 +1004,12 @@
                     }
                     userInfo.deviceId = deviceInfo.device_id;
                 }
+            }
+            
+            // Make sure the cookie ID is stored in user info if available
+            if (cookieId && (!userInfo.cookieId || userInfo.cookieId !== cookieId)) {
+                userInfo.cookieId = cookieId;
+                updateDebug(`Updated user info with cookie ID: ${cookieId}`);
             }
             
             // Track detailed visit history

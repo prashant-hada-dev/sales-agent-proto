@@ -1,0 +1,18 @@
+2025-03-17 21:29:00,362 - database.db_connection - WARNING - MONGODB_URI environment variable not set. Using in-memory data storage.
+2025-03-17 21:29:00,363 - __main__ - INFO - Initializing MongoDB connection...
+2025-03-17 21:29:00,364 - database.db_connection - WARNING - MONGODB_URI environment variable not set. Using in-memory data storage.
+2025-03-17 21:29:00,365 - __main__ - WARNING - Failed to connect to MongoDB, using in-memory storage
+2025-03-17 21:29:00,366 - __main__ - INFO - Database initialized: False
+2025-03-17 21:29:00,875 - storage.cloudinary_storage - WARNING - Cloudinary credentials not fully configured. Document storage will use local filesystem.
+2025-03-17 21:29:00,884 - __main__ - INFO - Initializing Cloudinary storage...
+2025-03-17 21:29:00,885 - storage.cloudinary_storage - WARNING - Cloudinary credentials not fully configured. Document storage will use local filesystem.
+2025-03-17 21:29:00,886 - storage.cloudinary_storage - WARNING - Cloudinary credentials not fully configured. Document storage will use local filesystem.
+2025-03-17 21:29:00,886 - __main__ - WARNING - Failed to initialize Cloudinary storage, using local file storage
+2025-03-17 21:29:00,888 - __main__ - INFO - Storage initialized: False
+2025-03-17 21:29:07,538 - agents_config - INFO - Using OpenAI API key: sk-pr...FKLUA
+2025-03-17 21:29:09,429 - agents_config - INFO - OpenAI client configured successfully with API key
+2025-03-17 21:29:09,435 - agents_new - INFO - Using OpenAI API key in agents_new/__init__.py: sk-pr...FKLUA
+2025-03-17 21:29:09,436 - agents_new - INFO - Set API key directly in openai module
+2025-03-17 21:29:13,457 - agents_new.sales_agent - INFO - Sales agent initialized
+2025-03-17 21:29:13,460 - agents_new.document_agent - INFO - Document verification agent initialized with enhanced vision capabilities
+2025-03-17 21:29:13,474 - agents_new.payment_agent - INFO - Payment agent initialized with integrated payment tools

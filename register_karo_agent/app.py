@@ -299,11 +299,52 @@ async def request_document_upload(websocket: WebSocket):
         }))
         logger.info("Requested document upload from client")
 
-async def process_message(session_id: str, message: str, websocket: WebSocket):
+async def check_existing_payment(session_id: str, cookie_id: str = None, device_id: str = None) -> bool:
+    """
+    Check if a user has already completed payment based on various identifiers.
+    Returns True if payment is completed, False otherwise.
+    """
+    # Prepare identifier with all available IDs
+    identifier = {}
+    if session_id:
+        identifier["session_id"] = session_id
+    if cookie_id:
+        identifier["cookie_id"] = cookie_id
+    if device_id:
+        identifier["device_id"] = device_id
+    
+    # If no identifiers, can't identify the user
+    if not identifier:
+        return False
+    
+    # Check payment status for this user
+    if DB_AVAILABLE:
+        return UserProfile.has_completed_payment(identifier)
+    else:
+        # Fallback to in-memory check
+        # First try by cookie ID
+        if cookie_id and cookie_id in payment_status:
+            return payment_status[cookie_id].get("completed", False)
+        
+        # Then try by session ID
+        if session_id and session_id in payment_status:
+            return payment_status[session_id].get("completed", False)
+        
+        # Then try by device ID (not implemented in memory mode yet)
+        return False
+
+async def process_message(session_id: str, message: str, websocket: WebSocket, cookie_id: str = None, device_id: str = None):
     """Process a user message using the appropriate agent."""
     logger.info(f"Processing message for session {session_id}: {message[:50]}...")
     
-    # Add to chat history (memory or database)
+    # Get user identifier
+    identifier = {"session_id": session_id}
+    if cookie_id:
+        identifier["cookie_id"] = cookie_id
+    if device_id:
+        identifier["device_id"] = device_id
+    
+    # Add to chat history
     if DB_AVAILABLE:
         # Add message to database
         UserProfile.add_message_to_conversation(session_id, {"role": "user", "content": message})
@@ -313,6 +354,9 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
             chat_histories[session_id] = []
         
         chat_histories[session_id].append({"role": "user", "content": message})
+    
+    # Check if user has already completed payment
+    payment_already_completed = await check_existing_payment(session_id, cookie_id, device_id)
     
     # Determine which agent to use based on conversation state
     agent_to_use = sales_agent  # Default to sales agent
@@ -342,8 +386,36 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
     
     # If we're at the payment stage
     elif payment_pending:
-        agent_to_use = payment_agent
-        logger.info(f"Using payment agent for session {session_id}")
+        # Check if this user has already completed payment with another session/device
+        if payment_already_completed:
+            # User already paid, no need to show payment page again
+            logger.info(f"User has already completed payment in another session, skipping payment agent")
+            # Move them out of payment_pending state
+            if DB_AVAILABLE:
+                UserProfile.update_payment_info(session_id, {"pending": False, "completed": True, "status": "completed"})
+            else:
+                if session_id in payment_status:
+                    payment_status[session_id]["pending"] = False
+                    payment_status[session_id]["completed"] = True
+                    payment_status[session_id]["status"] = "completed"
+            
+            # Send confirmation message
+            already_paid_msg = "I see you've already completed the payment for your company registration. Great! Your registration is being processed, and our team will be in touch with you shortly with the next steps. Is there anything else you'd like to know about the process?"
+            await send_bot_message(websocket, already_paid_msg)
+            
+            # Add confirmation to chat history
+            if DB_AVAILABLE:
+                UserProfile.add_message_to_conversation(session_id, {"role": "assistant", "content": already_paid_msg})
+            else:
+                chat_histories[session_id].append({"role": "assistant", "content": already_paid_msg})
+                
+            # Continue as sales agent
+            agent_to_use = sales_agent
+            logger.info(f"Using sales agent for session {session_id} (payment already completed)")
+        else:
+            # Normal payment flow
+            agent_to_use = payment_agent
+            logger.info(f"Using payment agent for session {session_id}")
     else:
         logger.info(f"Using sales agent for session {session_id}")
     
@@ -688,17 +760,26 @@ If language preference is Hinglish, respond in conversational Hindi-English mixe
         logger.error(f"Error processing message: {str(e)}", exc_info=True)
         await send_bot_message(websocket, "I'm having trouble processing your request. Please try again.")
 
-async def handle_inactivity(session_id: str, websocket: WebSocket, context: Optional[str] = None):
+async def handle_inactivity(session_id: str, websocket: WebSocket, context: Optional[str] = None, cookie_id: str = None, device_id: str = None):
     """Handle user inactivity with AI-generated follow-ups based on conversation context."""
     logger.info(f"Handling inactivity for session {session_id}")
     
-    # Check if session exists
+    # Get user identifier
+    identifier = {"session_id": session_id}
+    if cookie_id:
+        identifier["cookie_id"] = cookie_id
+    if device_id:
+        identifier["device_id"] = device_id
+    
+    # Check if user exists
     if DB_AVAILABLE:
-        user_data = UserProfile.get_by_session(session_id)
-        if not user_data or "conversation" not in user_data:
+        user_data = UserProfile.find_user(identifier)
+        if not user_data or "conversation" not in user_data or not user_data["conversation"]:
+            logger.info(f"No conversation history for session {session_id}, cannot generate follow-up")
             return
     else:
-        if session_id not in chat_histories:
+        if session_id not in chat_histories or not chat_histories[session_id]:
+            logger.info(f"No in-memory conversation history for session {session_id}")
             return
     
     # Determine which agent to use based on conversation state
@@ -898,70 +979,186 @@ async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for chat communication."""
     await websocket.accept()
     
-    # Generate a session ID
+    # Generate a session ID for this connection
     session_id = str(uuid.uuid4())
     active_connections[session_id] = websocket
     logger.info(f"New WebSocket connection established: {session_id}")
+    
+    # Variables to track user identification
+    cookie_id = None
+    device_id = None
+    user_identified = False
     
     try:
         # Send session ID to client on connection
         await websocket.send_text(json.dumps({
             "type": "session_info",
-            "session_id": session_id
+            "session_id": session_id,
+            "requires_cookie": True,  # Tell client we need a cookie
+            "requires_device_id": True  # Tell client we need device fingerprint
         }))
-        logger.info(f"Sent session ID to client: {session_id}")
-        
-        # Create user profile in database if available
-        if DB_AVAILABLE:
-            UserProfile.create_or_update(session_id, {
-                "created_at": datetime.now().isoformat(),
-                "last_active": datetime.now().isoformat()
-            })
+        logger.info(f"Sent session ID to client and requested identifiers: {session_id}")
         
         while True:
             data = await websocket.receive_text()
             data_json = json.loads(data)
             
-            # Check if session_id is provided in the message (for reconnects)
-            if "session_id" in data_json:
-                provided_session_id = data_json["session_id"]
+            # Handle identifiers from client
+            if "cookie_id" in data_json:
+                cookie_id = data_json["cookie_id"]
+                logger.info(f"Received cookie ID: {cookie_id}")
+            
+            # Handle device ID
+            if "device_id" in data_json:
+                device_id = data_json["device_id"]
+                logger.info(f"Received device ID: {device_id}")
+                
+                # Try to find a user with device ID or cookie ID
+                if DB_AVAILABLE:
+                    # Build identifiers with all available IDs
+                    identifiers = {}
+                    
+                    # Device ID is the strongest identifier
+                    if device_id:
+                        identifiers["device_id"] = device_id
+                    
+                    # Cookie ID is next best identifier
+                    if cookie_id:
+                        identifiers["cookie_id"] = cookie_id
+                    
+                    # Always include session ID
+                    identifiers["session_id"] = session_id
+                    
+                    # If this is a new user with no cookie, generate one
+                    if not cookie_id:
+                        # Generate a new cookie ID
+                        cookie_id = f"cookie_{str(uuid.uuid4())}"
+                        await websocket.send_text(json.dumps({
+                            "type": "set_cookie",
+                            "cookie_id": cookie_id
+                        }))
+                        identifiers["cookie_id"] = cookie_id
+                        logger.info(f"Sent new cookie ID to client: {cookie_id}")
+                    
+                    # Check if user exists with any of the identifiers
+                    existing_user = UserProfile.find_user(identifiers)
+                    if existing_user:
+                        # Update the existing user with this new session and all identifiers
+                        user_identified = True
+                        UserProfile.create_or_update_user(
+                            identifiers,
+                            {"last_active": datetime.now().isoformat()}
+                        )
+                        
+                        # Check if this user has already completed payment
+                        payment_completed = await check_existing_payment(session_id, cookie_id, device_id)
+                        
+                        # Send a welcome back message
+                        if "name" in existing_user:
+                            if payment_completed:
+                                greeting = f"Welcome back, {existing_user['name']}! I see you've already completed payment for your registration. Is there anything else I can help you with today?"
+                            else:
+                                greeting = f"Welcome back, {existing_user['name']}! How can I help you today?"
+                        else:
+                            if payment_completed:
+                                greeting = "Welcome back! I see you've already completed payment for your registration. Is there anything else I can help you with today?"
+                            else:
+                                greeting = "Welcome back! How can I help you with your company registration today?"
+                        
+                        await send_bot_message(websocket, greeting)
+                        logger.info(f"Welcomed returning user with identifiers: {identifiers}")
+                    else:
+                        # Create a new user profile with all identifiers
+                        UserProfile.create_or_update_user(
+                            identifiers,
+                            {
+                                "created_at": datetime.now().isoformat(),
+                                "last_active": datetime.now().isoformat()
+                            }
+                        )
+                        logger.info(f"Created new user profile with identifiers: {identifiers}")
+            
+            # Check if a previous session_id is provided (for reconnects)
+            if "previous_session_id" in data_json:
+                previous_session_id = data_json["previous_session_id"]
                 
                 if DB_AVAILABLE:
                     # Check if session exists in DB
-                    user_data = UserProfile.get_by_session(provided_session_id)
+                    user_data = UserProfile.get_by_session(previous_session_id)
                     if user_data:
-                        session_id = provided_session_id
-                        active_connections[session_id] = websocket
-                        logger.info(f"Reconnected session from DB: {session_id}")
-                        
-                        # If this session has a short context, display it as a greeting
-                        if "short_context" in user_data:
-                            greeting = f"Welcome back! I see you were interested in {user_data.get('short_context', 'company registration')}. How can I help you today?"
-                            await send_bot_message(websocket, greeting)
+                        # Link the new session to the existing user
+                        UserProfile.create_or_update_user(
+                            {"session_id": previous_session_id},
+                            {"sessions": [session_id]}
+                        )
+                        user_identified = True
+                        logger.info(f"Reconnected session from DB: previous={previous_session_id}, current={session_id}")
                 else:
-                    # Check in-memory data
-                    if provided_session_id in chat_histories:
-                        session_id = provided_session_id
+                    # In-memory data handling
+                    if previous_session_id in chat_histories:
+                        # Just update the active connection mapping
                         active_connections[session_id] = websocket
-                        logger.info(f"Reconnected session: {session_id}")
+                        logger.info(f"Reconnected session: {previous_session_id} -> {session_id}")
             
-            # Track device information if provided
-            if "device_info" in data_json and DB_AVAILABLE:
-                device_info = data_json["device_info"]
-                UserProfile.track_device(session_id, device_info)
-                logger.info(f"Tracked device info for session {session_id}: {device_info.get('device_id', 'unknown')}")
-            
-            if data_json["type"] == "message":
-                # Update last active timestamp in DB if available
-                if DB_AVAILABLE:
-                    UserProfile.create_or_update(session_id, {"last_active": datetime.now().isoformat()})
+            # Handle client info (device, user details)
+            if "client_info" in data_json:
+                client_info = data_json["client_info"]
                 
-                # Process user message
-                await process_message(session_id, data_json["text"], websocket)
+                # We have several possible identifiers in client_info
+                identifiers = {}
+                
+                # Use cookie as identifier if available
+                if cookie_id:
+                    identifiers["cookie_id"] = cookie_id
+                
+                # Use session as a fallback identifier
+                identifiers["session_id"] = session_id
+                
+                # Update user info in database
+                if DB_AVAILABLE:
+                    user_data = {}
+                    
+                    # Extract device info
+                    if "device" in client_info:
+                        user_data["device"] = client_info["device"]
+                        logger.info(f"Tracked device info for session {session_id}")
+                    
+                    # Extract contact info if available
+                    contact_fields = ["name", "email", "phone"]
+                    if any(field in client_info for field in contact_fields):
+                        # We have user contact info - this is a strong identifier
+                        for field in contact_fields:
+                            if field in client_info:
+                                identifiers[field] = client_info[field]
+                                user_data[field] = client_info[field]
+                        
+                        user_identified = True
+                        logger.info(f"User identified with contact info for session {session_id}")
+                    
+                    # Create or update user with available info
+                    UserProfile.create_or_update_user(identifiers, user_data)
+            
+            # Process messages
+            if data_json["type"] == "message":
+                # Update last active timestamp
+                if DB_AVAILABLE:
+                    # Use cookie_id if available, otherwise session_id
+                    identifier = {"session_id": session_id}
+                    if cookie_id:
+                        identifier["cookie_id"] = cookie_id
+                    
+                    # Update last active timestamp
+                    UserProfile.create_or_update_user(
+                        identifier,
+                        {"last_active": datetime.now().isoformat()}
+                    )
+                
+                # Process user message with all available identifiers
+                await process_message(session_id, data_json["text"], websocket, cookie_id, device_id)
             elif data_json["type"] == "inactive":
                 # Handle user inactivity
                 context = data_json.get("context")
-                await handle_inactivity(session_id, websocket, context)
+                await handle_inactivity(session_id, websocket, context, cookie_id, device_id)
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected: {session_id}")
         if session_id in active_connections:
@@ -972,64 +1169,77 @@ async def websocket_endpoint(websocket: WebSocket):
             del active_connections[session_id]
 
 @app.post("/upload-document")
-async def upload_document(document: UploadFile = File(...), session_id: str = Form(...)):
+async def upload_document(
+    document: UploadFile = File(...),
+    session_id: str = Form(...),
+    cookie_id: str = Form(None),
+    device_id: str = Form(None)
+):
     """Handle document upload."""
     logger.info(f"Document upload requested for session {session_id}: {document.filename}")
     
-    # Handle session ID from localStorage which might have a prefix
-    # or match a session ID from our active_connections
-    actual_session_id = None
+    # Identify user - try device ID first, then cookie, then session
+    user = None
+    actual_session_id = session_id
     
-    # If the exact session ID exists in active_connections
-    if session_id in active_connections:
+    if DB_AVAILABLE:
+        identifiers = {}
+        
+        # Use device ID if provided (strongest identifier)
+        if device_id:
+            identifiers["device_id"] = device_id
+            
+        # Use cookie ID if provided
+        if cookie_id:
+            identifiers["cookie_id"] = cookie_id
+        
+        # Always include session ID as a fallback
+        identifiers["session_id"] = session_id
+        
+        # Try to find the user with the provided identifiers
+        user = UserProfile.find_user(identifiers)
+        
+        if not user:
+            # Create temporary user with this session
+            user = UserProfile.create_or_update_user(
+                {"session_id": session_id},
+                {
+                    "is_temporary": True,
+                    "created_at": datetime.now().isoformat(),
+                    "last_active": datetime.now().isoformat()
+                }
+            )
+            logger.info(f"Created temporary user for document upload (session: {session_id})")
+        else:
+            logger.info(f"Found existing user for document upload")
+    
+    # In memory fallback - use session ID directly
+    elif session_id in active_connections:
         actual_session_id = session_id
     else:
-        # If the session ID isn't directly in active_connections,
-        # check if it's a key in chat_histories or DB
-        if DB_AVAILABLE:
-            user_data = UserProfile.get_by_session(session_id)
-            if user_data:
-                actual_session_id = session_id
-        elif session_id in chat_histories:
+        # Simplified session ID mapping for in-memory mode
+        # Try to find exact match in chat_histories
+        if session_id in chat_histories:
             actual_session_id = session_id
         else:
-            # Check if the session ID has a prefix like "session_"
-            # and if there's a matching UUID in the active connections
-            if session_id.startswith("session_"):
-                # Extract the UUID part after the prefix
-                uuid_part = session_id.split("_", 1)[1]
-                # Look for any matching connection that ends with this UUID part
-                for conn_id in active_connections:
-                    if conn_id.endswith(uuid_part):
-                        actual_session_id = conn_id
-                        logger.info(f"Mapped prefixed session ID {session_id} to {actual_session_id}")
-                        break
+            # Try partial matching only if absolutely necessary
+            for conn_id in chat_histories:
+                if session_id.endswith(conn_id[-8:]) or conn_id.endswith(session_id[-8:]):
+                    actual_session_id = conn_id
+                    logger.info(f"Mapped session ID {session_id} to {actual_session_id}")
+                    break
             
-            # As a fallback, if we still can't find the session ID, log an error
-            if not actual_session_id:
-                # Final attempt: check for recently active sessions that might match
-                if DB_AVAILABLE:
-                    # Check in DB for partial match (not implemented in this MVP)
-                    pass
-                else:
-                    for conn_id in chat_histories:
-                        if session_id.endswith(conn_id[-8:]) or conn_id.endswith(session_id[-8:]):
-                            actual_session_id = conn_id
-                            logger.info(f"Mapped session ID {session_id} to {actual_session_id} by partial match")
-                            break
-                
-                if not actual_session_id:
-                    logger.warning(f"Document upload for unknown session {session_id}, document will not be processed")
-                    return {"success": False, "error": "Unknown session ID. Please refresh the page and try again."}
-    
-    # From here on, use actual_session_id for all operations
-    logger.info(f"Mapped session ID {session_id} to actual session ID {actual_session_id}")
+            if actual_session_id != session_id:
+                logger.info(f"Using mapped session ID {actual_session_id}")
     
     # Create uploads directory if it doesn't exist
     os.makedirs("uploads", exist_ok=True)
     
+    # Generate a unique file name for the document
+    unique_id = str(uuid.uuid4())
+    file_path = f"uploads/{unique_id}_{document.filename}"
+    
     # Save the uploaded file
-    file_path = f"uploads/{uuid.uuid4()}_{document.filename}"
     with open(file_path, "wb") as f:
         f.write(await document.read())
     
@@ -1046,8 +1256,9 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
         except Exception as e:
             logger.error(f"Failed to upload to Cloudinary: {str(e)}")
     
-    # Update document status in DB or memory
+    # Create document data
     document_data = {
+        "document_id": f"doc_{unique_id}",
         "pending": False,
         "file_path": file_path,
         "filename": document.filename,
@@ -1057,10 +1268,23 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
     if cloudinary_url:
         document_data["cloudinary_url"] = cloudinary_url
     
+    # Store document data
     if DB_AVAILABLE:
-        UserProfile.update_document_info(actual_session_id, document_data)
+        # Use the user ID we found earlier if possible
+        if user and "_id" in user:
+            document_data["user_id"] = user["_id"]
+        
+        # Update using proper identifier
+        if cookie_id:
+            UserProfile.update_document_info(actual_session_id, document_data)
+            logger.info(f"Document info added to user identified by cookie and session")
+        else:
+            UserProfile.update_document_info(actual_session_id, document_data)
+            logger.info(f"Document info added to user identified by session only")
     else:
+        # Use in-memory storage
         document_status[actual_session_id] = document_data
+        logger.info(f"Document info stored in memory for session {actual_session_id}")
     
     # Process document with vision API
     try:
@@ -1347,51 +1571,54 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
         return {"success": False, "error": str(e)}
 
 @app.get("/check-payment/{payment_id}")
-async def check_payment_endpoint(payment_id: str, session_id: str):
+async def check_payment_endpoint(payment_id: str, session_id: str, cookie_id: str = None, device_id: str = None):
     """Endpoint to check payment status."""
     logger.info(f"Checking payment status for: {payment_id}, session: {session_id}")
     
-    # Handle session ID mapping similarly to upload_document
-    actual_session_id = None
+    # Identify user - try device ID first, then cookie, then session
+    user = None
+    actual_session_id = session_id
     
-    # If the exact session ID exists in active_connections
-    if session_id in active_connections:
+    if DB_AVAILABLE:
+        identifiers = {}
+        
+        # Use device ID as strongest identifier if provided
+        if device_id:
+            identifiers["device_id"] = device_id
+            
+        # Use cookie ID if provided
+        if cookie_id:
+            identifiers["cookie_id"] = cookie_id
+        
+        # Always include session ID as a fallback
+        identifiers["session_id"] = session_id
+        
+        # Try to find the user with the provided identifiers
+        user = UserProfile.find_user(identifiers)
+        
+        if not user:
+            logger.warning(f"No user found for payment check (session: {session_id}, cookie: {cookie_id})")
+            return {"success": False, "error": "User not found"}
+        
+        logger.info(f"Found user for payment check")
+    
+    # In memory fallback - use session ID directly
+    elif session_id in active_connections:
         actual_session_id = session_id
     else:
-        # Check in DB or chat_histories
-        if DB_AVAILABLE:
-            user_data = UserProfile.get_by_session(session_id)
-            if user_data:
-                actual_session_id = session_id
-        elif session_id in chat_histories:
+        # Check in chat histories
+        if session_id in chat_histories:
             actual_session_id = session_id
         else:
-            # Various fallback checks similar to upload_document
-            if session_id.startswith("session_"):
-                uuid_part = session_id.split("_", 1)[1]
-                for conn_id in active_connections:
-                    if conn_id.endswith(uuid_part):
-                        actual_session_id = conn_id
-                        logger.info(f"Mapped prefixed session ID {session_id} to {actual_session_id}")
-                        break
+            # Simplified partial matching for in-memory mode
+            for conn_id in chat_histories:
+                if session_id.endswith(conn_id[-8:]) or conn_id.endswith(session_id[-8:]):
+                    actual_session_id = conn_id
+                    logger.info(f"Mapped session ID {session_id} to {actual_session_id}")
+                    break
             
-            if not actual_session_id:
-                if DB_AVAILABLE:
-                    # DB checks for partial match (not implemented in MVP)
-                    pass
-                else:
-                    for conn_id in chat_histories:
-                        if session_id.endswith(conn_id[-8:]) or conn_id.endswith(session_id[-8:]):
-                            actual_session_id = conn_id
-                            logger.info(f"Mapped session ID {session_id} to {actual_session_id} by partial match")
-                            break
-                
-                if not actual_session_id:
-                    logger.warning(f"Payment check for unknown session {session_id}, payment will not be processed")
-                    return {"success": False, "error": "Unknown session ID. Please refresh the page and try again."}
-    
-    # From here on, use actual_session_id for all operations
-    logger.info(f"Mapped session ID {session_id} to actual session ID {actual_session_id}")
+            if actual_session_id != session_id:
+                logger.info(f"Using mapped session ID {actual_session_id}")
     
     try:
         payment_result = check_payment_status(payment_id)
