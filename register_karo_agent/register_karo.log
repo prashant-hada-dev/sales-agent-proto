@@ -16,3 +16,930 @@
 2025-03-17 21:29:13,457 - agents_new.sales_agent - INFO - Sales agent initialized
 2025-03-17 21:29:13,460 - agents_new.document_agent - INFO - Document verification agent initialized with enhanced vision capabilities
 2025-03-17 21:29:13,474 - agents_new.payment_agent - INFO - Payment agent initialized with integrated payment tools
+2025-03-17 22:58:21,653 - database.db_connection - WARNING - MONGODB_URI environment variable not set. Using in-memory data storage.
+2025-03-17 22:58:21,654 - __main__ - INFO - Initializing MongoDB connection...
+2025-03-17 22:58:21,654 - database.db_connection - WARNING - MONGODB_URI environment variable not set. Using in-memory data storage.
+2025-03-17 22:58:21,655 - __main__ - WARNING - Failed to connect to MongoDB, using in-memory storage
+2025-03-17 22:58:21,655 - __main__ - INFO - Database initialized: False
+2025-03-17 22:58:22,183 - storage.cloudinary_storage - WARNING - Cloudinary credentials not fully configured. Document storage will use local filesystem.
+2025-03-17 22:58:22,186 - __main__ - INFO - Initializing Cloudinary storage...
+2025-03-17 22:58:22,187 - storage.cloudinary_storage - WARNING - Cloudinary credentials not fully configured. Document storage will use local filesystem.
+2025-03-17 22:58:22,189 - storage.cloudinary_storage - WARNING - Cloudinary credentials not fully configured. Document storage will use local filesystem.
+2025-03-17 22:58:22,191 - __main__ - WARNING - Failed to initialize Cloudinary storage, using local file storage
+2025-03-17 22:58:22,193 - __main__ - INFO - Storage initialized: False
+2025-03-17 22:58:25,998 - agents_config - INFO - Using OpenAI API key: sk-pr...FKLUA
+2025-03-17 22:58:27,025 - agents_config - INFO - OpenAI client configured successfully with API key
+2025-03-17 22:58:27,028 - agents_new - INFO - Using OpenAI API key in agents_new/__init__.py: sk-pr...FKLUA
+2025-03-17 22:58:27,029 - agents_new - INFO - Set API key directly in openai module
+2025-03-17 22:58:30,084 - agents_new.sales_agent - INFO - Sales agent initialized
+2025-03-17 22:58:30,087 - agents_new.document_agent - INFO - Document verification agent initialized with enhanced vision capabilities
+2025-03-17 22:58:30,102 - agents_new.payment_agent - INFO - Payment agent initialized with integrated payment tools
+2025-03-17 22:58:52,215 - app - INFO - New WebSocket connection established: 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 22:58:52,219 - app - INFO - Sent session ID to client and requested identifiers: 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 22:58:52,238 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 22:58:52,243 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 22:58:57,155 - database.db_connection - INFO - Successfully connected to MongoDB. Database: registerkaro
+2025-03-17 22:58:57,285 - database.models - INFO - Updated user profile 67d84cea2656c674db37a766
+2025-03-17 22:58:57,320 - app - INFO - Processing message for session 71807251-9b10-4934-9dcc-e80482d8452b: Reconnected to chat...
+2025-03-17 22:58:57,444 - app - INFO - Using sales agent for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 22:58:57,563 - app - INFO - Using existing thread ID from database: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 22:58:57,565 - app - INFO - Running sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 22:59:00,166 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 22:59:00,172 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 22:59:00,177 - app - ERROR - Error processing message: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 595, in process_message
+    result = await Runner.run(agent_to_use, input=prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 22:59:00,270 - app - INFO - Sent message to client: I'm having trouble processing your request. Please...
+2025-03-17 22:59:00,272 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 22:59:04,516 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 204 No Content"
+2025-03-17 23:01:01,118 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:01:01,119 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:01:01,293 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:01:01,295 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:01:02,335 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:01:02,341 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:01:02,346 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:01:02,414 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:01:06,100 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 204 No Content"
+2025-03-17 23:03:03,118 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:03:03,120 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:03:03,299 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:03:03,302 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:03:04,375 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:03:04,381 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:03:04,387 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:03:04,455 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:03:07,752 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 204 No Content"
+2025-03-17 23:05:05,122 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:05:05,124 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:05:05,299 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:05:05,304 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:05:06,230 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:05:06,236 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:05:06,240 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:05:06,312 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:05:09,302 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 204 No Content"
+2025-03-17 23:07:07,116 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:07:07,118 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:07:07,287 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:07:07,289 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:07:08,294 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:07:08,300 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:07:08,305 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:07:08,373 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:07:10,786 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:07:10,790 - openai.agents.tracing - ERROR - Tracing client error 401: {
+  "error": {
+    "message": "Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.",
+    "type": "invalid_request_error",
+    "param": null,
+    "code": "invalid_api_key"
+  }
+}
+2025-03-17 23:09:09,135 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:09:09,136 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:09:09,307 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:09:09,309 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:09:09,726 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:09:09,729 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:09:09,733 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:09:09,784 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:09:12,618 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 204 No Content"
+2025-03-17 23:11:10,111 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:11:10,112 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:11:10,282 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:11:10,284 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:11:11,289 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:11:11,292 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:11:11,296 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:11:11,343 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:11:14,314 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 204 No Content"
+2025-03-17 23:13:12,115 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:13:12,117 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:13:12,292 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:13:12,294 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:13:13,254 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:13:13,258 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:13:13,262 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:13:13,312 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:13:15,808 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:13:15,811 - openai.agents.tracing - ERROR - Tracing client error 401: {
+  "error": {
+    "message": "Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.",
+    "type": "invalid_request_error",
+    "param": null,
+    "code": "invalid_api_key"
+  }
+}
+2025-03-17 23:15:14,119 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:15:14,120 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:15:14,291 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:15:14,293 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:15:14,701 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:15:14,704 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:15:14,708 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:15:14,757 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:15:17,461 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 204 No Content"
+2025-03-17 23:17:15,119 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:17:15,122 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:17:15,298 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:17:15,300 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:17:16,347 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:17:16,351 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:17:16,356 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:17:16,417 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:17:19,205 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:17:19,209 - openai.agents.tracing - ERROR - Tracing client error 401: {
+  "error": {
+    "message": "Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.",
+    "type": "invalid_request_error",
+    "param": null,
+    "code": "invalid_api_key"
+  }
+}
+2025-03-17 23:19:17,122 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:19:17,124 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:19:17,298 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:19:17,300 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:19:18,318 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:19:18,323 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:19:18,329 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:19:18,404 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:19:20,940 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:19:20,941 - openai.agents.tracing - ERROR - Tracing client error 401: {
+  "error": {
+    "message": "Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.",
+    "type": "invalid_request_error",
+    "param": null,
+    "code": "invalid_api_key"
+  }
+}
+2025-03-17 23:21:19,141 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:21:19,144 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:21:19,312 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:21:19,314 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:21:19,753 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:21:19,759 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:21:19,765 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:21:19,830 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:21:22,766 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 204 No Content"
+2025-03-17 23:23:20,132 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:23:20,134 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:23:20,302 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:23:20,304 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:23:20,789 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:23:20,792 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:23:20,796 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:23:20,846 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:23:24,346 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:23:24,349 - openai.agents.tracing - ERROR - Tracing client error 401: {
+  "error": {
+    "message": "Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.",
+    "type": "invalid_request_error",
+    "param": null,
+    "code": "invalid_api_key"
+  }
+}
+2025-03-17 23:25:21,110 - app - INFO - Received cookie ID: cookie_d273e070-d2a5-4a8e-9017-ecd60af9ca6f
+2025-03-17 23:25:21,112 - app - INFO - Handling inactivity for session 71807251-9b10-4934-9dcc-e80482d8452b
+2025-03-17 23:25:21,282 - app - INFO - Using existing thread ID for follow-up: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba
+2025-03-17 23:25:21,284 - app - INFO - Generating context-aware follow-up with sales agent for session: 71807251-9b10-4934-9dcc-e80482d8452b (thread ID: thread_069f4c6b-a2a3-470d-b5ca-c606bee444ba)
+2025-03-17 23:25:21,700 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/responses "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:25:21,704 - openai.agents - ERROR - Error getting response: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:25:21,708 - app - ERROR - Error generating inactivity follow-up: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+Traceback (most recent call last):
+  File "C:\Users\Admin\Desktop\ChatGPT -agents sdk - sales demo\register_karo_agent\app.py", line 939, in handle_inactivity
+    result = await Runner.run(agent_to_use, input=inactivity_prompt)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 210, in run
+    input_guardrail_results, turn_result = await asyncio.gather(
+                                           ^^^^^^^^^^^^^^^^^^^^^
+    ...<16 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 719, in _run_single_turn
+    new_response = await cls._get_new_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\run.py", line 862, in _get_new_response
+    new_response = await model.get_response(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 75, in get_response
+    response = await self._fetch_response(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\agents\models\openai_responses.py", line 229, in _fetch_response
+    return await self._client.responses.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<13 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\resources\responses\responses.py", line 1414, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+    ...<30 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "C:\Users\Admin\AppData\Roaming\Python\Python313\site-packages\openai\_base_client.py", line 1562, in _request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'error': {'message': 'Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}
+2025-03-17 23:25:21,764 - app - INFO - Sent follow_up to client: Just checking in - are you still there? I'm here t...
+2025-03-17 23:25:25,925 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/traces/ingest "HTTP/1.1 401 Unauthorized"
+2025-03-17 23:25:25,928 - openai.agents.tracing - ERROR - Tracing client error 401: {
+  "error": {
+    "message": "Incorrect API key provided: sk-proj-********************************************************************************************************************************************************KLUA. You can find your API key at https://platform.openai.com/account/api-keys.",
+    "type": "invalid_request_error",
+    "param": null,
+    "code": "invalid_api_key"
+  }
+}
