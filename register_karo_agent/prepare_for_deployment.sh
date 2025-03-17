@@ -30,14 +30,18 @@ services:
   - type: web
     name: register-karo-agent
     env: python
+    runtime: python3
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python start_server.py
+    region: ohio
     envVars:
       - key: OPENAI_API_KEY
         sync: false
       - key: PORT
         value: 8080
+      - key: PYTHON_VERSION
+        value: 3.11.0
 EOL
   echo "render.yaml created."
 else
