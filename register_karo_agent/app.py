@@ -66,13 +66,20 @@ from agents_new.payment_agent import payment_agent
 from tools.document_tools import verify_document_with_vision
 from tools.payment_tools import generate_razorpay_link, check_payment_status
 
-# Configure logging
+# Configure logging with absolute path for log file
+import os
+
+# Ensure logs directory exists
+logs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+os.makedirs(logs_dir, exist_ok=True)
+log_file = os.path.join(logs_dir, "register_karo.log")
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("register_karo.log")
+        logging.FileHandler(log_file)
     ]
 )
 logger = logging.getLogger(__name__)
@@ -87,11 +94,19 @@ if not os.environ.get("RAZORPAY_KEY_ID") or not os.environ.get("RAZORPAY_KEY_SEC
 # Create FastAPI app
 app = FastAPI(title="RegisterKaro AI Sales Agent")
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Mount static files using absolute paths
+import os
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+templates_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+
+# Create directories if they don't exist
+os.makedirs(static_dir, exist_ok=True)
+os.makedirs(templates_dir, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # Templates
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory=templates_dir)
 
 # In-memory storage as fallback
 chat_histories: Dict[str, List[Dict[str, str]]] = {}  # session_id -> list of messages
@@ -1232,12 +1247,13 @@ async def upload_document(
             if actual_session_id != session_id:
                 logger.info(f"Using mapped session ID {actual_session_id}")
     
-    # Create uploads directory if it doesn't exist
-    os.makedirs("uploads", exist_ok=True)
+    # Create uploads directory with absolute path if it doesn't exist
+    uploads_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
     
     # Generate a unique file name for the document
     unique_id = str(uuid.uuid4())
-    file_path = f"uploads/{unique_id}_{document.filename}"
+    file_path = os.path.join(uploads_dir, f"{unique_id}_{document.filename}")
     
     # Save the uploaded file
     with open(file_path, "wb") as f:
@@ -1288,8 +1304,9 @@ async def upload_document(
     
     # Process document with vision API
     try:
-        # Convert local path to URL for the API
-        document_url = f"file://{os.path.abspath(file_path)}"
+        # Convert local path to absolute URL for the API
+        # The file_path is already absolute, so we can use it directly
+        document_url = f"file://{file_path}"
         
         if os.environ.get("OPENAI_API_KEY"):
             # Verify document
