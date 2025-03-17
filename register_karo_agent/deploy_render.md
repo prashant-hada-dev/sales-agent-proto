@@ -17,13 +17,18 @@ This guide will help you deploy the RegisterKaro Agent to Render.com so it runs 
 4. Connect your GitHub repository
 5. Configure the service:
    - Name: `register-karo-agent` (or any name you prefer)
-   - Runtime: `Python 3`
+   - Environment: `Python 3`
+   - Region: `Ohio (US East)` (or choose the region closest to your users)
+   - Branch: `fresh-deploy` (or your deployment branch)
+   - Runtime: `Python 3.11.0`
    - Build Command: `pip install -r requirements.txt`
    - Start Command: `python start_server.py`
    - Select the Free plan
 6. Add environment variables:
    - Click "Advanced" > "Environment Variables"
    - Add `OPENAI_API_KEY` with your API key value (do not commit the actual key to GitHub)
+   - Add `PORT` with value `8080`
+   - Add `PYTHON_VERSION` with value `3.11.0`
 7. Click "Create Web Service"
 
 ### Option 2: Deploy using Render Blueprint (render.yaml)
