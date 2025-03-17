@@ -16,7 +16,7 @@ fi
 # Make sure we have a Procfile
 if [ ! -f Procfile ]; then
   echo "Creating Procfile..."
-  echo "web: python start_server.py" > Procfile
+  echo "web: python register_karo_agent/start_server.py" > Procfile
   echo "Procfile created."
 else
   echo "Procfile exists."
@@ -32,8 +32,8 @@ services:
     env: python
     runtime: python3
     plan: free
-    buildCommand: pip install -r register_karo_agent/requirements.txt
-    startCommand: cd register_karo_agent && python start_server.py
+    buildCommand: pip install -r requirements.txt
+    startCommand: python register_karo_agent/start_server.py
     region: ohio
     envVars:
       - key: OPENAI_API_KEY
