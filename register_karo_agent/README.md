@@ -57,6 +57,15 @@ RAZORPAY_KEY_ID=your_razorpay_key_id
 RAZORPAY_KEY_SECRET=your_razorpay_key_secret
 ```
 
+**⚠️ IMPORTANT: SECURITY WARNING ⚠️**
+
+Never commit your `.env` file or any file containing API keys, passwords, or other sensitive information to version control! The `.env` file is listed in `.gitignore` and should stay that way.
+
+If you accidentally committed sensitive information:
+1. Remove the file from git tracking: `git rm --cached path/to/file`
+2. Update your `.gitignore` to exclude the file
+3. Change your API keys/passwords immediately as they may have been compromised
+
 ### Running the Application
 
 1. Start the FastAPI server:
