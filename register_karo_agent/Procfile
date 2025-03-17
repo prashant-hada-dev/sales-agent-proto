@@ -1,1 +1,1 @@
-web: python start_server.py
+web: cd register_karo_agent && python start_server.py

@@ -32,8 +32,8 @@ services:
     env: python
     runtime: python3
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python start_server.py
+    buildCommand: pip install -r register_karo_agent/requirements.txt
+    startCommand: cd register_karo_agent && python start_server.py
     region: ohio
     envVars:
       - key: OPENAI_API_KEY
