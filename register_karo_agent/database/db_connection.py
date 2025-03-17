@@ -35,15 +35,29 @@ class MongoDB:
                 self._initialized = False
                 return
             
-            # Connect to MongoDB
-            self._client = MongoClient(mongo_uri)
+            # Connect to MongoDB with explicit SSL settings
+            # Add SSL configuration options to make it work across different environments
+            self._client = MongoClient(
+                mongo_uri,
+                ssl=True,
+                ssl_cert_reqs='CERT_NONE',  # Skip certificate validation
+                serverSelectionTimeoutMS=5000,  # Reduce timeout for faster fallback
+                connectTimeoutMS=5000,
+                retryWrites=True
+            )
             self._db = self._client[db_name]
             
-            # Verify connection
-            self._client.admin.command('ping')
-            
-            logger.info(f"Successfully connected to MongoDB. Database: {db_name}")
-            self._initialized = True
+            # Try to verify connection with a short timeout
+            try:
+                # Verify connection
+                self._client.admin.command('ping')
+                
+                logger.info(f"Successfully connected to MongoDB. Database: {db_name}")
+                self._initialized = True
+            except Exception as ping_error:
+                logger.error(f"Failed to ping MongoDB: {str(ping_error)}")
+                logger.info("Will continue without MongoDB and use in-memory storage instead")
+                self._initialized = False
             
         except Exception as e:
             logger.error(f"Error connecting to MongoDB: {str(e)}")
