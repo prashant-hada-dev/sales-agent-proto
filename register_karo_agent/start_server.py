@@ -73,7 +73,10 @@ def main():
     parser.add_argument('--reload', action='store_true', help='Enable auto-reload for development')
     args = parser.parse_args()
     
-    print(f"Starting RegisterKaro server on port {args.port}...")
+    # Get port from environment variable if available (for cloud hosting)
+    port = int(os.environ.get('PORT', args.port))
+    
+    print(f"Starting RegisterKaro server on port {port}...")
     
     # Initialize database
     db_initialized = initialize_database()
@@ -90,7 +93,7 @@ def main():
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
-        port=args.port,
+        port=port,
         reload=args.reload
     )
 
