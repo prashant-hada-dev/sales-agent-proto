@@ -7,13 +7,18 @@ import logging
 import argparse
 import uvicorn
 
-# Configure logging
+# Configure logging with absolute path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+logs_dir = os.path.join(script_dir, "logs")
+os.makedirs(logs_dir, exist_ok=True)
+log_file = os.path.join(logs_dir, "register_karo.log")
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("register_karo.log")
+        logging.FileHandler(log_file)
     ]
 )
 logger = logging.getLogger(__name__)
@@ -86,8 +91,9 @@ def main():
     storage_initialized = initialize_storage()
     logger.info(f"Storage initialized: {storage_initialized}")
     
-    # Make sure uploads directory exists
-    os.makedirs("uploads", exist_ok=True)
+    # Make sure uploads directory exists - use absolute path
+    uploads_dir = os.path.join(script_dir, "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
     
     # Start the server
     uvicorn.run(
