@@ -6,8 +6,9 @@ websockets>=11.0.3
 jinja2>=3.1.2
 python-dotenv>=1.0.0
 
-# OpenAI API for document verification
+# OpenAI API and Agents SDK
 openai>=1.0.0
+openai-agents>=0.0.0  # OpenAI Agents SDK
 
 # Razorpay API for payment processing
 razorpay>=1.3.0
