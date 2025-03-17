@@ -2,8 +2,30 @@ import os
 import base64
 import logging
 import mimetypes
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from openai import OpenAI, AsyncOpenAI
+
+# Import Cloudinary storage (fix import path)
+try:
+    from storage.cloudinary_storage import cloudinary_storage
+except ImportError:
+    # Try with absolute import
+    try:
+        from register_karo_agent.storage.cloudinary_storage import cloudinary_storage
+    except ImportError:
+        cloudinary_storage = None
+        logging.warning("Could not import cloudinary_storage, document storage will use local file system only")
+
+# Import database models
+try:
+    from database.models import UserProfile
+except ImportError:
+    # Try with absolute import
+    try:
+        from register_karo_agent.database.models import UserProfile
+    except ImportError:
+        UserProfile = None
+        logging.warning("Could not import UserProfile, database persistence will be disabled")
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -19,12 +41,13 @@ SUPPORTED_FORMATS = [
     "application/pdf"  # Added PDF support
 ]
 
-async def verify_document_with_vision(document_url: str) -> Dict[str, Any]:
+async def verify_document_with_vision(document_url: str, session_id: Optional[str] = None) -> Dict[str, Any]:
     """
-    Verify a document using OpenAI's Vision API.
+    Verify a document using OpenAI's Vision API and store it in Cloudinary.
     
     Args:
         document_url: URL or file path to the document image or PDF
+        session_id: User's session ID for database persistence
         
     Returns:
         Dictionary containing verification results
@@ -54,6 +77,14 @@ async def verify_document_with_vision(document_url: str) -> Dict[str, Any]:
                     "next_steps": "request_new_document"
                 }
             
+            # Upload to Cloudinary if available
+            cloudinary_result = None
+            if cloudinary_storage and cloudinary_storage.is_available:
+                logger.info(f"Uploading document to Cloudinary: {file_path}")
+                cloudinary_result = await cloudinary_storage.upload_document(file_path)
+                if cloudinary_result:
+                    logger.info(f"Document uploaded to Cloudinary: {cloudinary_result['secure_url']}")
+            
             # Read the file as binary and encode as base64
             with open(file_path, "rb") as file:
                 base64_data = base64.b64encode(file.read()).decode('utf-8')
@@ -72,14 +103,14 @@ async def verify_document_with_vision(document_url: str) -> Dict[str, Any]:
                                 {
                                     "type": "input_file",
                                     "filename": filename,
-                                    "file_data": f"data:{mime_type};base64,{base64_data}",
+                                    "file_data": f"data:{mime_type};base64,{base64_data}"
                                 },
                                 {
                                     "type": "input_text",
                                     "text": "You are an advanced document verification expert. Analyze this identity document in detail:\n\n1) Document type (Aadhaar, PAN card, passport, driver's license, etc.)\n2) Document quality assessment (clarity, lighting, completeness)\n3) Verify presence of critical information (name, ID number, date of birth/issue)\n4) Detect any signs of tampering or manipulation\n5) Check if the document meets official format requirements\n\nProvide a comprehensive assessment of whether this document is valid for company registration purposes in India. Be extremely specific about any issues found."
-                                },
-                            ],
-                        },
+                                }
+                            ]
+                        }
                     ]
                 )
                 # Extract analysis from response
@@ -133,16 +164,44 @@ async def verify_document_with_vision(document_url: str) -> Dict[str, Any]:
         
         logger.info(f"Document validation result: {is_valid}, based on analysis: {analysis[:100]}...")
         
+        # Prepare result object
+        result = {
+            "is_valid": is_valid,
+            "analysis": analysis,
+            "next_steps": "proceed_to_payment" if is_valid else "request_new_document"
+        }
+        
+        # Add Cloudinary information if available
+        if cloudinary_result:
+            result["cloudinary_url"] = cloudinary_result["secure_url"]
+            result["cloudinary_public_id"] = cloudinary_result["public_id"]
+        
+        # Store document information in the database if session_id is provided
+        if session_id and UserProfile:
+            # Prepare document information
+            document_info = {
+                "file_path": file_path,
+                "filename": filename,
+                "mime_type": mime_type,
+                "is_valid": is_valid,
+                "analysis": analysis
+            }
+            
+            # Add Cloudinary information if available
+            if cloudinary_result:
+                document_info["cloudinary_url"] = cloudinary_result["secure_url"]
+                document_info["cloudinary_public_id"] = cloudinary_result["public_id"]
+            
+            # Update document info in the database
+            UserProfile.update_document_info(session_id, document_info)
+            logger.info(f"Document information saved to database for session {session_id}")
+        
         if is_valid:
             logger.info("Document verified successfully")
         else:
             logger.warning("Document verification failed")
             
-        return {
-            "is_valid": is_valid,
-            "analysis": analysis,
-            "next_steps": "proceed_to_payment" if is_valid else "request_new_document"
-        }
+        return result
         
     except Exception as e:
         error_message = str(e)

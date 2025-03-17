@@ -1,110 +1,214 @@
-"""
-Integration test for RegisterKaro document OCR and payment flow
-"""
 import os
+import asyncio
 import logging
-import base64
-from pathlib import Path
-from tools.payment_tools import generate_razorpay_link, check_payment_status
+from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def test_payment_flow():
-    """Test the payment link generation and status verification"""
-    logger.info("Testing payment flow")
-    
-    # Test customer information
-    customer_info = {
-        "name": "Test Customer",
-        "email": "test@example.com",
-        "phone": "9876543210",
-        "company_type": "private limited"
-    }
+# Import database and storage components
+try:
+    from database.db_connection import mongo_db
+    from database.models import UserProfile
+    DB_AVAILABLE = True
+except ImportError:
+    logger.warning("Database modules not available")
+    DB_AVAILABLE = False
+
+try:
+    from storage.cloudinary_storage import cloudinary_storage
+    CLOUDINARY_AVAILABLE = True
+except ImportError:
+    logger.warning("Cloudinary storage modules not available")
+    CLOUDINARY_AVAILABLE = False
+
+async def test_database_connection():
+    """Test connecting to MongoDB."""
+    if not DB_AVAILABLE:
+        logger.error("MongoDB modules not available, cannot test connection")
+        return False
     
     try:
-        # Test payment link generation
-        payment_result = generate_razorpay_link(customer_info)
-        
-        if not payment_result.get("success", False):
-            logger.error(f"Failed to generate payment link: {payment_result.get('error', 'Unknown error')}")
+        mongo_db.initialize()
+        if mongo_db.is_connected:
+            logger.info("Successfully connected to MongoDB!")
+            return True
+        else:
+            logger.error("Failed to connect to MongoDB")
             return False
-        
-        payment_id = payment_result["payment_id"]
-        payment_link = payment_result["payment_link"]
-        
-        logger.info(f"Successfully generated payment link: {payment_link}")
-        logger.info(f"Payment ID: {payment_id}")
-        
-        # Test payment status verification
-        status_result = check_payment_status(payment_id)
-        
-        if not status_result.get("success", False):
-            logger.error(f"Failed to check payment status: {status_result.get('error', 'Unknown error')}")
-            return False
-        
-        status = status_result["status"]
-        completed = status_result["payment_completed"]
-        
-        logger.info(f"Payment status: {status}")
-        logger.info(f"Payment completed: {completed}")
-        
-        return True
     except Exception as e:
-        logger.error(f"Error in payment flow test: {str(e)}")
+        logger.error(f"Error testing MongoDB connection: {str(e)}")
         return False
 
-def test_ocr_availability():
-    """Test the availability of OCR tools without actually calling API"""
-    logger.info("Testing OCR availability")
+async def test_cloudinary_connection():
+    """Test connecting to Cloudinary."""
+    if not CLOUDINARY_AVAILABLE:
+        logger.error("Cloudinary modules not available, cannot test connection")
+        return False
     
     try:
-        # Find a sample image file in the uploads directory
-        uploads_dir = Path("uploads")
-        image_files = list(uploads_dir.glob("*.png")) + list(uploads_dir.glob("*.jpg"))
-        
-        if not image_files:
-            logger.error("No image files found in uploads directory for testing")
+        cloudinary_storage.initialize()
+        if cloudinary_storage.is_available:
+            logger.info("Successfully connected to Cloudinary!")
+            return True
+        else:
+            logger.error("Failed to connect to Cloudinary")
             return False
-        
-        # Use the first image file found
-        sample_image = str(image_files[0])
-        logger.info(f"Found sample image for testing: {sample_image}")
-        
-        # Check if OpenAI API key is available
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            logger.warning("OPENAI_API_KEY environment variable is not set, OCR may not work properly")
-            return False
-            
-        logger.info("OCR prerequisites check passed")
-        return True
     except Exception as e:
-        logger.error(f"Error in OCR availability test: {str(e)}")
+        logger.error(f"Error testing Cloudinary connection: {str(e)}")
         return False
 
-def main():
-    """Run all integration tests"""
-    logger.info("Starting RegisterKaro payment and OCR availability tests")
+async def test_user_profile_operations():
+    """Test creating, updating, and retrieving user profiles."""
+    if not DB_AVAILABLE or not mongo_db.is_connected:
+        logger.error("MongoDB not available or not connected")
+        return False
     
-    # Test OCR availability (without calling API)
-    ocr_result = test_ocr_availability()
-    logger.info(f"OCR availability test {'PASSED' if ocr_result else 'FAILED'}")
+    try:
+        # Generate test session ID
+        test_session_id = f"test_session_{datetime.now().timestamp()}"
+        
+        # Create user profile
+        initial_data = {
+            "name": "Test User",
+            "email": "test@example.com",
+            "phone": "+919876543210",
+            "created_at": datetime.now().isoformat()
+        }
+        
+        result = UserProfile.create_or_update(test_session_id, initial_data)
+        if result is None:
+            logger.error("Failed to create user profile")
+            return False
+        
+        logger.info(f"Created user profile: {result}")
+        
+        # Add a message to conversation
+        message = {
+            "role": "user",
+            "content": "Hello, I need help with company registration",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        msg_result = UserProfile.add_message_to_conversation(test_session_id, message)
+        if not msg_result:
+            logger.error("Failed to add message to conversation")
+            return False
+        
+        logger.info("Added message to conversation")
+        
+        # Update context summary
+        context_summary = "User is interested in company registration services."
+        summary_result = UserProfile.update_context_summary(test_session_id, context_summary)
+        if not summary_result:
+            logger.error("Failed to update context summary")
+            return False
+        
+        logger.info("Updated context summary")
+        
+        # Retrieve the user profile
+        user_data = UserProfile.get_by_session(test_session_id)
+        if user_data is None:
+            logger.error("Failed to retrieve user profile")
+            return False
+        
+        logger.info(f"Retrieved user profile: {user_data}")
+        
+        # Verify data integrity
+        if user_data.get("name") != "Test User" or user_data.get("email") != "test@example.com":
+            logger.error("User data integrity check failed")
+            return False
+        
+        if "conversation" not in user_data or len(user_data["conversation"]) < 1:
+            logger.error("Conversation data integrity check failed")
+            return False
+        
+        if user_data.get("context_summary") != context_summary:
+            logger.error("Context summary integrity check failed")
+            return False
+        
+        logger.info("All user profile operations tests passed!")
+        return True
     
-    # Test payment flow
-    payment_result = test_payment_flow()
-    logger.info(f"Payment flow test {'PASSED' if payment_result else 'FAILED'}")
+    except Exception as e:
+        logger.error(f"Error testing user profile operations: {str(e)}")
+        return False
+
+async def test_document_storage():
+    """Test Cloudinary document storage."""
+    if not CLOUDINARY_AVAILABLE or not cloudinary_storage.is_available:
+        logger.error("Cloudinary not available or not connected")
+        return False
     
-    # Overall test result
-    overall_result = ocr_result and payment_result
+    try:
+        # Create a test file
+        test_file_path = "test_document.txt"
+        with open(test_file_path, "w") as f:
+            f.write("This is a test document for Cloudinary upload.")
+        
+        # Upload to Cloudinary
+        logger.info(f"Uploading test document to Cloudinary: {test_file_path}")
+        result = await cloudinary_storage.upload_document(test_file_path, "test_documents")
+        
+        # Remove the test file
+        os.remove(test_file_path)
+        
+        if result is None:
+            logger.error("Failed to upload test document to Cloudinary")
+            return False
+        
+        # Check result
+        if "secure_url" not in result or "public_id" not in result:
+            logger.error("Invalid Cloudinary upload result format")
+            return False
+        
+        logger.info(f"Document uploaded to Cloudinary: {result['secure_url']}")
+        
+        # Generate URL for the uploaded document
+        url = cloudinary_storage.get_url(result["public_id"])
+        if not url:
+            logger.error("Failed to generate URL for Cloudinary document")
+            return False
+        
+        logger.info(f"Generated URL for document: {url}")
+        logger.info("All document storage tests passed!")
+        return True
     
-    if overall_result:
-        logger.info("✅ All integration tests PASSED!")
-    else:
-        logger.error("❌ Some integration tests FAILED!")
+    except Exception as e:
+        logger.error(f"Error testing document storage: {str(e)}")
+        # Clean up in case of error
+        if os.path.exists("test_document.txt"):
+            os.remove("test_document.txt")
+        return False
+
+async def main():
+    """Run all integration tests."""
+    logger.info("Starting integration tests")
     
-    return overall_result
+    # Test MongoDB connection
+    db_result = await test_database_connection()
+    logger.info(f"MongoDB connection test: {'PASSED' if db_result else 'FAILED'}")
+    
+    # Test Cloudinary connection
+    cloudinary_result = await test_cloudinary_connection()
+    logger.info(f"Cloudinary connection test: {'PASSED' if cloudinary_result else 'FAILED'}")
+    
+    # If MongoDB is connected, test user operations
+    if db_result:
+        user_ops_result = await test_user_profile_operations()
+        logger.info(f"User profile operations test: {'PASSED' if user_ops_result else 'FAILED'}")
+    
+    # If Cloudinary is connected, test document storage
+    if cloudinary_result:
+        doc_storage_result = await test_document_storage()
+        logger.info(f"Document storage test: {'PASSED' if doc_storage_result else 'FAILED'}")
+    
+    logger.info("Integration tests completed")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

@@ -1,8 +1,10 @@
-document.addEventListener('DOMContentLoaded', function() {
+ document.addEventListener('DOMContentLoaded', function() {
     // DOM Elements
     const chatWidget = document.getElementById('chat-widget');
     const chatBubble = document.getElementById('chat-bubble');
     const closeChat = document.getElementById('close-chat');
+    const minimizeChat = document.getElementById('minimize-chat');
+    const maximizeChat = document.getElementById('maximize-chat'); // New maximize button
     const chatMessages = document.getElementById('chat-messages');
     const messageInput = document.getElementById('message-input');
     const sendMessage = document.getElementById('send-message');
@@ -15,6 +17,28 @@ document.addEventListener('DOMContentLoaded', function() {
     const fileName = document.getElementById('file-name');
     const paymentArea = document.getElementById('payment-area');
     const paymentLink = document.getElementById('payment-link');
+    const chatHeader = document.getElementById('chat-header');
+    const chatContainer = document.getElementById('chat-container');
+
+    // Add debugging indicator
+    const debugInfo = document.createElement('div');
+    debugInfo.id = 'debug-info';
+    debugInfo.style.position = 'fixed';
+    debugInfo.style.bottom = '10px';
+    debugInfo.style.right = '10px';
+    debugInfo.style.backgroundColor = 'rgba(0,0,0,0.7)';
+    debugInfo.style.color = 'white';
+    debugInfo.style.padding = '5px 10px';
+    debugInfo.style.borderRadius = '5px';
+    debugInfo.style.fontSize = '12px';
+    debugInfo.style.zIndex = '10000';
+    debugInfo.innerHTML = 'Debug: Initializing...';
+    document.body.appendChild(debugInfo);
+
+    function updateDebug(message) {
+        console.log(`DEBUG: ${message}`);
+        debugInfo.innerHTML = `Debug: ${message}`;
+    }
 
     // Variables
     let sessionId = null;
@@ -24,10 +48,13 @@ document.addEventListener('DOMContentLoaded', function() {
     let inactivityTimer = null;
     let retryCount = 0;
     let followUpCount = 0;
+    let minimized = false;
+    let maximized = false; // Track maximized state
     const maxRetries = 3;
     const maxFollowUps = 5; // Maximum number of follow-ups before backing off
     const baseInactivityTimeout = 120000; // 2 minutes initial timeout
     const reconnectInterval = 3000; // 3 seconds
+    const cookieLifetime = 365; // Cookie lifetime in days (1 year)
     
     // Progressive timeouts that increase with each follow-up
     const inactivityTimeouts = [
@@ -72,7 +99,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function connectWebSocket() {
         if (socket && socket.readyState === WebSocket.OPEN) {
-            console.log('WebSocket already connected');
+            updateDebug('WebSocket already connected');
             return;
         }
 
@@ -80,84 +107,114 @@ document.addEventListener('DOMContentLoaded', function() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws`;
         
+        updateDebug(`Connecting to WebSocket at ${wsUrl}`);
+        
         socket = new WebSocket(wsUrl);
         
         socket.onopen = function() {
-            console.log('WebSocket connected');
+            updateDebug('WebSocket connected successfully!');
             retryCount = 0;
+            
+            // Get device info for tracking
+            const deviceInfo = getDeviceInfo();
             
             // If we have a session ID from a previous connection, include it
             if (sessionId) {
                 const reconnectMsg = {
                     type: 'message',
                     text: 'Reconnected to chat',
-                    session_id: sessionId
+                    session_id: sessionId,
+                    device_info: deviceInfo
                 };
                 socket.send(JSON.stringify(reconnectMsg));
-            }
-            
-            // Send initial greeting on first connection
-            if (!sessionId) {
+                updateDebug(`Sent reconnection message with session ID: ${sessionId}`);
+            } else {
+                // For new sessions, we'll just wait for the server to assign us a session ID
+                // and then we'll update our tracking info with the next message
+                
+                // Send initial greeting on first connection
                 setTimeout(() => {
                     const botGreeting = "👋 Hello! I'm your RegisterKaro incorporation specialist. I can help you register your company quickly and efficiently. How can I assist you today?";
                     addMessage(botGreeting, 'bot');
+                    updateDebug('Added initial greeting');
                 }, 500);
             }
         };
         
         socket.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            console.log('WebSocket message received:', data);
-            
-            if (data.type === 'session_info') {
-                // Store the server's session ID
-                serverSessionId = data.session_id;
-                console.log('Received server session ID:', serverSessionId);
-            } else if (data.type === 'message' || data.type === 'follow_up') {
-                console.log('Adding message to chat:', data.text.substring(0, 50) + '...');
-                addMessage(data.text, 'bot', data.type);
-                resetFollowUpCount();
-            } else if (data.type === 'show_document_upload') {
-                showDocumentUploadForm();
-            } else if (data.type === 'payment_link') {
-                showPaymentLink(data.link);
+            try {
+                const data = JSON.parse(event.data);
+                updateDebug(`Received message of type: ${data.type}`);
+                
+                if (data.type === 'session_info') {
+                    // Store the server's session ID
+                    serverSessionId = data.session_id;
+                    updateDebug(`Received server session ID: ${serverSessionId}`);
+                } else if (data.type === 'message' || data.type === 'follow_up') {
+                    updateDebug(`Adding message to chat: ${data.text.substring(0, 30)}...`);
+                    addMessage(data.text, 'bot', data.type);
+                    resetFollowUpCount();
+                    
+                    // Auto-close payment area if payment confirmation message is received
+                    if (data.type === 'message' && 
+                        (data.text.includes("payment has been successfully received") || 
+                         data.text.includes("Payment successful") || 
+                         data.text.includes("payment confirmed"))) {
+                        closePaymentArea();
+                    }
+                } else if (data.type === 'show_document_upload') {
+                    showDocumentUploadForm();
+                    updateDebug('Showing document upload form');
+                } else if (data.type === 'payment_link') {
+                    showPaymentLink(data.link);
+                    updateDebug(`Showing payment link: ${data.link}`);
+                }
+            } catch (error) {
+                updateDebug(`Error parsing WebSocket message: ${error.message}`);
+                console.error('Error parsing WebSocket message:', error);
+                console.error('Raw message data:', event.data);
             }
         };
         
-        socket.onclose = function() {
-            console.log('WebSocket connection closed');
+        socket.onclose = function(event) {
+            updateDebug(`WebSocket closed with code ${event.code}, reason: ${event.reason}`);
             
             // Try to reconnect with exponential backoff
             if (retryCount < maxRetries) {
                 const timeout = Math.min(30000, reconnectInterval * Math.pow(2, retryCount));
-                console.log(`Attempting to reconnect in ${timeout/1000} seconds...`);
+                updateDebug(`Attempting to reconnect in ${timeout/1000} seconds...`);
                 
                 setTimeout(() => {
                     retryCount++;
                     connectWebSocket();
                 }, timeout);
             } else {
-                console.error('Failed to reconnect after several attempts');
+                updateDebug('Failed to reconnect after several attempts');
                 addMessage('Connection lost. Please reload the page to continue chatting.', 'bot');
             }
         };
         
         socket.onerror = function(error) {
+            updateDebug(`WebSocket error: ${error.message || 'Unknown error'}`);
             console.error('WebSocket error:', error);
         };
     }
 
     function sendMessageToServer(text) {
         if (!socket || socket.readyState !== WebSocket.OPEN) {
-            console.error('WebSocket not connected');
+            updateDebug('WebSocket not connected, attempting to reconnect...');
             addMessage('Connection lost. Trying to reconnect...', 'bot');
             connectWebSocket();
             return;
         }
         
+        // Get device info for tracking across sessions
+        const deviceInfo = getDeviceInfo();
+        
         const message = {
             type: 'message',
-            text: text
+            text: text,
+            device_info: deviceInfo
         };
         
         // Add session ID if we have one
@@ -165,7 +222,9 @@ document.addEventListener('DOMContentLoaded', function() {
             message.session_id = sessionId;
         }
         
+        updateDebug(`Sending message to server: ${text.substring(0, 30)}...`);
         socket.send(JSON.stringify(message));
+        updateDebug('Message sent successfully');
     }
 
     function resetInactivityTimer() {
@@ -176,11 +235,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // Get the appropriate timeout based on follow-up count
             const timeout = inactivityTimeouts[Math.min(followUpCount, inactivityTimeouts.length - 1)];
             
-            console.log(`Setting inactivity timer: ${timeout/1000} seconds (follow-up #${followUpCount + 1})`);
+            updateDebug(`Setting inactivity timer: ${timeout/1000} seconds (follow-up #${followUpCount + 1})`);
             
             inactivityTimer = setTimeout(() => {
                 if (socket && socket.readyState === WebSocket.OPEN && sessionId) {
-                    console.log(`User inactive for ${timeout/1000} seconds, sending follow-up #${followUpCount + 1}`);
+                    updateDebug(`User inactive for ${timeout/1000} seconds, sending follow-up #${followUpCount + 1}`);
                     
                     // Check if payment area is visible to determine context
                     let context = null;
@@ -203,14 +262,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }, timeout);
         } else {
-            console.log(`Maximum follow-ups (${maxFollowUps}) reached. No more follow-ups will be sent.`);
+            updateDebug(`Maximum follow-ups (${maxFollowUps}) reached. No more follow-ups will be sent.`);
         }
     }
     
     // Reset follow-up count when user interacts
     function resetFollowUpCount() {
         if (followUpCount > 0) {
-            console.log(`Resetting follow-up count from ${followUpCount} to 0 due to user activity`);
+            updateDebug(`Resetting follow-up count from ${followUpCount} to 0 due to user activity`);
             followUpCount = 0;
         }
         resetInactivityTimer();
@@ -218,7 +277,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function showDocumentUploadForm() {
         documentUploadArea.style.display = 'block';
-        paymentArea.style.display = 'none';
+        // Ensure the chat window is adjusted to keep both visible
+        adjustChatLayout();
     }
 
     function showPaymentLink(link) {
@@ -228,9 +288,44 @@ document.addEventListener('DOMContentLoaded', function() {
         // Store the payment ID and link for later use
         paymentLink.dataset.paymentId = paymentId;
         paymentLink.dataset.originalLink = link;
+        paymentLink.href = link;
         
         // Display the payment area
         paymentArea.style.display = 'block';
+        
+        // Add close button if it doesn't exist
+        if (!document.querySelector('.payment-close')) {
+            const closeButton = document.createElement('button');
+            closeButton.classList.add('payment-close');
+            closeButton.innerHTML = '&times;';
+            closeButton.addEventListener('click', closePaymentArea);
+            paymentArea.appendChild(closeButton);
+        }
+        
+        // Ensure the chat window is adjusted to keep both visible
+        adjustChatLayout();
+    }
+    
+    function closePaymentArea() {
+        paymentArea.style.display = 'none';
+        // Readjust chat layout
+        adjustChatLayout();
+    }
+    
+    function adjustChatLayout() {
+        // Determine if any special areas are showing
+        const documentShowing = (documentUploadArea.style.display === 'block');
+        const paymentShowing = (paymentArea.style.display === 'block');
+        
+        // Add appropriate classes to ensure chat messages remain visible
+        if (documentShowing || paymentShowing) {
+            chatMessages.classList.add('with-overlay');
+        } else {
+            chatMessages.classList.remove('with-overlay');
+        }
+        
+        // Scroll to the bottom to ensure latest messages are visible
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     // Initialize Razorpay checkout
@@ -252,10 +347,13 @@ document.addEventListener('DOMContentLoaded', function() {
             order_id: '', // Leave blank for our simulated environment
             handler: function (response) {
                 // Payment successful
-                addMessage("Payment successful! Your transaction ID is: " + response.razorpay_payment_id, 'bot');
+                addMessage("Payment successful! Your transaction ID is: " + response.razorpay_payment_id, 'user');
                 
                 // Check payment status on server
                 checkPaymentStatus(paymentId);
+                
+                // Close the payment area
+                closePaymentArea();
             },
             prefill: {
                 name: 'Test User',
@@ -270,7 +368,7 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             modal: {
                 ondismiss: function() {
-                    addMessage("Payment process was cancelled. You can try again when you're ready.", 'bot');
+                    addMessage("I'll complete the payment later.", 'user');
                 }
             },
             config: {
@@ -464,7 +562,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Use the server's session ID if available, otherwise fall back to client's ID
         const uploadSessionId = serverSessionId || sessionId;
-        console.log('Using session ID for document upload:', uploadSessionId);
+        updateDebug(`Using session ID for document upload: ${uploadSessionId}`);
         
         formData.append('session_id', uploadSessionId);
         
@@ -477,6 +575,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Show uploading status message
             addMessage(`Uploading ${file.name}... Please wait.`, 'bot');
             
+            updateDebug(`Starting document upload: ${file.name}`);
             const response = await fetch('/upload-document', {
                 method: 'POST',
                 body: formData
@@ -491,11 +590,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             const result = await response.json();
-            console.log('Document upload result:', result);
+            updateDebug(`Document upload result: ${JSON.stringify(result)}`);
             
             if (result.success) {
                 addMessage("Document uploaded successfully! Our specialist will verify it shortly.", 'bot');
                 documentUploadArea.style.display = 'none';
+                adjustChatLayout();
                 
                 // Reset the form
                 fileInput.value = '';
@@ -506,6 +606,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 addMessage(`Error uploading document: ${result.error || 'Unknown error'}`, 'bot');
             }
         } catch (error) {
+            updateDebug(`Error uploading document: ${error.message}`);
             console.error('Error uploading document:', error);
             addMessage(`Upload failed: ${error.message || 'Please check your connection and try again.'}`, 'bot');
             
@@ -529,6 +630,13 @@ document.addEventListener('DOMContentLoaded', function() {
         // Open the Razorpay checkout modal
         openRazorpayCheckout(paymentId);
     });
+    
+    // Add a close button event for the payment area
+    document.addEventListener('click', function(e) {
+        if (e.target && e.target.classList.contains('payment-close')) {
+            closePaymentArea();
+        }
+    });
 
     async function checkPaymentStatus(paymentId) {
         try {
@@ -538,40 +646,305 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             if (!paymentId) {
-                console.error('No payment ID available for status check');
+                updateDebug('No payment ID available for status check');
                 return;
             }
             
             // Use the server's session ID if available, otherwise fall back to client's ID
             const paymentSessionId = serverSessionId || sessionId;
-            console.log('Using session ID for payment check:', paymentSessionId);
+            updateDebug(`Using session ID for payment check: ${paymentSessionId}`);
             
             const response = await fetch(`/check-payment/${paymentId}?session_id=${paymentSessionId}`);
             const result = await response.json();
             
-            console.log('Payment status check:', result);
+            updateDebug(`Payment status check: ${JSON.stringify(result)}`);
             
             // Note: The server will send a WebSocket message if payment is complete
             // We don't need to do anything here since the server handles notifying the user
         } catch (error) {
+            updateDebug(`Error checking payment status: ${error.message}`);
             console.error('Error checking payment status:', error);
         }
     }
 
+    // Device fingerprinting and cookie management functions
+    function generateDeviceId() {
+        // Generate a device fingerprint based on browser information
+        const components = [
+            navigator.userAgent,
+            navigator.language,
+            screen.width + 'x' + screen.height,
+            new Date().getTimezoneOffset(),
+            navigator.platform,
+            !!navigator.cookieEnabled,
+            !!window.indexedDB,
+            !!window.localStorage,
+            !!window.sessionStorage
+        ];
+        
+        // Simple hash function
+        let hash = 0;
+        const str = components.join('|');
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        
+        // Convert to a string and make it positive
+        return 'device_' + Math.abs(hash).toString(16);
+    }
+    
+    function getDeviceInfo() {
+        // Get device fingerprint info for tracking across sessions
+        const deviceId = localStorage.getItem('deviceId') || generateDeviceId();
+        localStorage.setItem('deviceId', deviceId); // Store for future use
+        
+        return {
+            device_id: deviceId,
+            platform: navigator.platform,
+            screen_size: screen.width + 'x' + screen.height,
+            user_agent: navigator.userAgent.substring(0, 100), // Truncate to avoid too much data
+            language: navigator.language,
+            last_visit: new Date().toISOString()
+        };
+    }
+    
+    // Cookie management functions with enhanced persistence
+    function setCookie(name, value, days) {
+        // Extended cookie lifetime for better persistence
+        const expires = new Date();
+        expires.setTime(expires.getTime() + days * 24 * 60 * 60 * 1000);
+        
+        // Enhanced cookie settings for maximum compatibility and persistence
+        // Using multiple storage mechanisms for redundancy
+        try {
+            // Primary: Standard cookie
+            document.cookie = name + '=' + encodeURIComponent(value) +
+                ';expires=' + expires.toUTCString() +
+                ';path=/;SameSite=Lax';
+                
+            // Backup: localStorage (persistent)
+            localStorage.setItem(name, value);
+            
+            // Session backup: sessionStorage (session only)
+            sessionStorage.setItem(name, value);
+            
+            updateDebug(`Cookie set with redundant storage: ${name}=${value.substring(0, 10)}... (expires in ${days} days)`);
+        } catch (e) {
+            console.error('Error setting cookie:', e);
+        }
+    }
+
+    function getCookie(name) {
+        // Try to get from standard cookie first
+        const nameEQ = name + '=';
+        const ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) {
+                const value = decodeURIComponent(c.substring(nameEQ.length, c.length));
+                updateDebug(`Cookie retrieved: ${name}=${value.substring(0, 10)}...`);
+                return value;
+            }
+        }
+        
+        // Fallback to localStorage if cookie not found
+        const localValue = localStorage.getItem(name);
+        if (localValue) {
+            updateDebug(`Cookie retrieved from localStorage: ${name}=${localValue.substring(0, 10)}...`);
+            // Restore the cookie for future use
+            setCookie(name, localValue, cookieLifetime);
+            return localValue;
+        }
+        
+        // Final fallback to sessionStorage
+        const sessionValue = sessionStorage.getItem(name);
+        if (sessionValue) {
+            updateDebug(`Cookie retrieved from sessionStorage: ${name}=${sessionValue.substring(0, 10)}...`);
+            return sessionValue;
+        }
+        
+        updateDebug(`Cookie not found in any storage: ${name}`);
+        return null;
+    }
+
+    // Minimize chat functionality with direct style manipulation for reliability
+    minimizeChat.addEventListener('click', function() {
+        if (minimized) {
+            // Restore from minimized state
+            chatWidget.classList.remove('minimized');
+            
+            // Restore previous height
+            if (maximized) {
+                // If it was maximized before minimizing, restore to full screen
+                chatWidget.style.height = '100%';
+            } else {
+                // Otherwise restore to default height
+                chatWidget.style.height = '96vh';
+            }
+            
+            minimizeChat.innerHTML = '<i class="fas fa-minus"></i>';
+            minimized = false;
+            updateDebug('Chat restored from minimized state');
+            
+            // Focus the input field when restoring
+            setTimeout(() => messageInput.focus(), 100);
+        } else {
+            // Apply minimized state
+            chatWidget.classList.add('minimized');
+            
+            // Force height with inline styles
+            const originalHeight = chatWidget.style.height; // Store original for later
+            chatWidget.style.height = '70px';
+            chatWidget.style.minHeight = '70px';
+            chatWidget.style.maxHeight = '70px';
+            
+            minimizeChat.innerHTML = '<i class="fas fa-expand-alt"></i>';
+            minimized = true;
+            
+            // Reset maximize state if it was maximized but keep track of it
+            if (maximized) {
+                chatWidget.classList.remove('maximized');
+                maximizeChat.innerHTML = '<i class="fas fa-expand"></i>';
+                // Don't set maximized to false, so we know to restore to maximized state
+            }
+            
+            updateDebug('Chat minimized');
+        }
+    });
+    
+    // Maximize chat functionality with direct style manipulation for reliability
+    if (maximizeChat) {
+        maximizeChat.addEventListener('click', function() {
+            if (maximized) {
+                // Return to normal (non-maximized) state
+                chatWidget.classList.remove('maximized');
+                
+                // Reset to default position and size
+                chatWidget.style.top = '2vh';
+                chatWidget.style.right = '2vw';
+                chatWidget.style.bottom = '2vh';
+                chatWidget.style.left = '2vw';
+                chatWidget.style.width = '96vw';
+                chatWidget.style.height = '96vh';
+                chatWidget.style.borderRadius = '16px';
+                
+                maximizeChat.innerHTML = '<i class="fas fa-expand"></i>';
+                maximized = false;
+                updateDebug('Chat returned to normal size');
+            } else {
+                // Go to maximized (full-screen) state - direct style manipulation
+                chatWidget.classList.add('maximized');
+                
+                // Force full screen with inline styles for maximum browser compatibility
+                chatWidget.style.position = 'fixed';
+                chatWidget.style.top = '0';
+                chatWidget.style.right = '0';
+                chatWidget.style.bottom = '0';
+                chatWidget.style.left = '0';
+                chatWidget.style.width = '100%';
+                chatWidget.style.height = '100%';
+                chatWidget.style.borderRadius = '0';
+                chatWidget.style.margin = '0';
+                
+                maximizeChat.innerHTML = '<i class="fas fa-compress"></i>';
+                maximized = true;
+                
+                // Ensure it's not minimized
+                if (minimized) {
+                    chatWidget.classList.remove('minimized');
+                    chatWidget.style.height = '100%';
+                    minimizeChat.innerHTML = '<i class="fas fa-minus"></i>';
+                    minimized = false;
+                }
+                
+                updateDebug('Chat maximized to full screen');
+            }
+            
+            // Adjust layout after state change
+            adjustChatLayout();
+            
+            // Focus the input field after maximizing
+            setTimeout(() => messageInput.focus(), 100);
+        });
+    }
+
     // Initialize
     function initChat() {
-        // Generate a random session ID if we don't have one
-        sessionId = localStorage.getItem('chatSessionId');
+        // Try to get session ID from cookie with enhanced persistence
+        sessionId = getCookie('chatSessionId');
+        
+        // Get device fingerprint for session binding and tracking
+        const deviceInfo = getDeviceInfo();
+        
+        // If no session ID found, generate a new one with device fingerprinting
         if (!sessionId) {
-            sessionId = 'session_' + Math.random().toString(36).substring(2, 15);
-            localStorage.setItem('chatSessionId', sessionId);
+            // Create a session ID that includes device fingerprint for better tracking
+            sessionId = 'session_' + deviceInfo.device_id.substring(0, 8) + '_' + Date.now();
+            
+            // Store in multiple places for redundancy with extended lifetime
+            setCookie('chatSessionId', sessionId, cookieLifetime); // Set cookie to expire in 1 year
+            
+            updateDebug(`Generated new session ID using device fingerprinting: ${sessionId}`);
+        } else {
+            updateDebug(`Using existing session ID: ${sessionId}`);
+        }
+        
+        // Enhanced user tracking - store detailed visit information in localStorage for persistence
+        let userInfo;
+        try {
+            userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+            
+            // Update or initialize user info
+            if (!userInfo.firstVisit) {
+                userInfo.firstVisit = new Date().toISOString();
+                userInfo.visits = 1;
+                userInfo.deviceId = deviceInfo.device_id;
+            } else {
+                userInfo.visits = (userInfo.visits || 0) + 1;
+                
+                // If device ID has changed but session is preserved, note this for tracking
+                if (userInfo.deviceId && userInfo.deviceId !== deviceInfo.device_id) {
+                    userInfo.previousDevices = userInfo.previousDevices || [];
+                    if (!userInfo.previousDevices.includes(userInfo.deviceId)) {
+                        userInfo.previousDevices.push(userInfo.deviceId);
+                    }
+                    userInfo.deviceId = deviceInfo.device_id;
+                }
+            }
+            
+            // Track detailed visit history
+            if (!userInfo.visitHistory) {
+                userInfo.visitHistory = [];
+            }
+            
+            // Add current visit to history (limit to last 10 visits)
+            userInfo.visitHistory.push({
+                timestamp: new Date().toISOString(),
+                screenSize: deviceInfo.screen_size,
+                url: window.location.href
+            });
+            
+            // Keep only the most recent 10 visits
+            if (userInfo.visitHistory.length > 10) {
+                userInfo.visitHistory = userInfo.visitHistory.slice(-10);
+            }
+            
+            userInfo.lastActive = new Date().toISOString();
+            
+            // Store updated info in localStorage for persistence across browser sessions
+            localStorage.setItem('userInfo', JSON.stringify(userInfo));
+        } catch (e) {
+            console.error('Error updating user info:', e);
         }
         
         // Connect to WebSocket
         connectWebSocket();
         
-        // Auto-open chat if this is a direct chat link
-        if (window.location.hash === '#chat') {
+        // Auto-open chat for returning users or direct links
+        if (window.location.hash === '#chat' || (userInfo && userInfo.visits > 1)) {
             setTimeout(() => {
                 chatBubble.click();
             }, 1000);

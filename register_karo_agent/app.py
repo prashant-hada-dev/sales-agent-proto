@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+from bson import ObjectId
 import asyncio
 import logging
 from datetime import datetime
@@ -14,8 +15,43 @@ import uvicorn
 from starlette.websockets import WebSocketState
 from dotenv import load_dotenv
 
+# Custom JSON encoder for MongoDB ObjectId
+class MongoJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, ObjectId):
+            return str(obj)
+        return super().default(obj)
+
+# Helper function to convert MongoDB documents to serializable dictionaries
+def mongo_to_json_serializable(data):
+    """
+    Delegate to the UserProfile helper method for MongoDB serialization.
+    This ensures consistent serialization across the application.
+    """
+    from database.models import UserProfile
+    return UserProfile.mongo_to_json_serializable(data)
+
 # Load environment variables from .env file if present
 load_dotenv()
+
+# Import database and storage modules
+try:
+    from database.db_connection import mongo_db
+    from database.models import UserProfile
+    DB_AVAILABLE = True
+except ImportError:
+    mongo_db = None
+    UserProfile = None
+    DB_AVAILABLE = False
+    logging.warning("Database modules not available, using in-memory storage")
+
+try:
+    from storage.cloudinary_storage import cloudinary_storage
+    CLOUDINARY_AVAILABLE = True
+except ImportError:
+    cloudinary_storage = None
+    CLOUDINARY_AVAILABLE = False
+    logging.warning("Cloudinary storage not available, using local file storage only")
 
 # Initialize OpenAI client with API key
 import agents_config
@@ -57,14 +93,184 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Templates
 templates = Jinja2Templates(directory="templates")
 
-# In-memory storage for the MVP
+# In-memory storage as fallback
 chat_histories: Dict[str, List[Dict[str, str]]] = {}  # session_id -> list of messages
 user_info: Dict[str, Dict[str, Any]] = {}  # session_id -> user info
 document_status: Dict[str, Dict[str, Any]] = {}  # session_id -> document status
 payment_status: Dict[str, Dict[str, Any]] = {}  # session_id -> payment status
+thread_ids: Dict[str, str] = {}  # session_id -> OpenAI thread ID
 
 # Active WebSocket connections
 active_connections: Dict[str, WebSocket] = {}
+
+# Function to generate a context summary
+async def generate_context_summary(session_id: str) -> Dict[str, str]:
+    """
+    Generate a context summary for a session using the chat history.
+    Returns both a detailed summary and a short context (max 200 chars) for reconnection.
+    """
+    if DB_AVAILABLE:
+        user_data = UserProfile.get_by_session(session_id)
+        if user_data and "conversation" in user_data:
+            history = user_data["conversation"]
+            # Use only the last 10 messages for the summary
+            recent_history = history[-10:] if len(history) > 10 else history
+            
+            # Create a prompt for summarization
+            messages = []
+            for msg in recent_history:
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                messages.append(f"{role}: {content}")
+                
+            prompt = "\n".join(messages)
+            prompt += "\n\nSummarize the key points from this conversation, including user needs, preferences, and any important details:"
+            
+            # In a production system, the following would use an LLM call for better summaries
+            # Extract key information
+            user_name = ""
+            user_email = ""
+            user_phone = ""
+            
+            if "contact" in user_data:
+                user_name = user_data["contact"].get("name", "")
+                user_email = user_data["contact"].get("email", "")
+                user_phone = user_data["contact"].get("phone", "")
+            
+            summary = f"User: {user_name} | Email: {user_email} | Phone: {user_phone}\n\n"
+            
+            # Determine if user is communicating in Hinglish
+            language_preference = "English"
+            hinglish_indicators = ["मैं", "हमें", "मेरा", "आप", "कैसे", "क्या", "नहीं", "है", "करना", "चाहिए"]
+            if any(any(hindi_word in msg.get("content", "").lower() for hindi_word in hinglish_indicators)
+                  for msg in recent_history if msg.get("role") == "user"):
+                language_preference = "Hinglish"
+                
+            summary += f"Language preference: {language_preference}. "
+            
+            # Simple keyword-based extraction for status
+            service_type = "Private Limited company registration"
+            for msg in recent_history:
+                if msg.get("role") == "user" and "content" in msg:
+                    content = msg["content"].lower()
+                    if "llp" in content or "limited liability partnership" in content:
+                        service_type = "LLP registration"
+                    elif "opc" in content or "one person company" in content:
+                        service_type = "OPC registration"
+            
+            summary += f"Interested in {service_type}. "
+                
+            if any("document" in m.get("content", "").lower() for m in recent_history):
+                doc_status = "Document verification in progress. "
+                if "document" in user_data and user_data["document"].get("verified"):
+                    doc_status = "Document verified successfully. "
+                summary += doc_status
+                
+            if any("payment" in m.get("content", "").lower() for m in recent_history):
+                payment_info = "Payment pending. "
+                if "payment" in user_data and user_data["payment"].get("completed"):
+                    payment_info = "Payment completed successfully. "
+                summary += payment_info
+                
+            # Generate a short context (max 200 chars) for quick reference
+            short_context = f"{user_name or 'User'} is interested in {service_type}. "
+            
+            if "document" in user_data:
+                if user_data["document"].get("verified"):
+                    short_context += "Document verified. "
+                elif user_data["document"].get("pending"):
+                    short_context += "Awaiting document. "
+            
+            if "payment" in user_data:
+                if user_data["payment"].get("completed"):
+                    short_context += "Payment completed."
+                elif user_data["payment"].get("pending"):
+                    short_context += "Payment pending."
+            
+            short_context += f" Lang: {language_preference}."
+            
+            return {
+                "summary": summary,
+                "short_context": short_context[:200]  # Ensure it's not longer than 200 chars
+            }
+        else:
+            return {
+                "summary": "No conversation history available for this user.",
+                "short_context": "New user, no conversation history."
+            }
+    else:
+        # Fallback to in-memory data if database is not available
+        if session_id not in chat_histories:
+            return {
+                "summary": "No conversation history available for this user.",
+                "short_context": "New user, no conversation history."
+            }
+            
+        history = chat_histories[session_id]
+        recent_history = history[-10:] if len(history) > 10 else history
+        
+        # Simple extraction for the MVP
+        user_name = user_info.get(session_id, {}).get("name", "")
+        user_email = user_info.get(session_id, {}).get("email", "")
+        user_phone = user_info.get(session_id, {}).get("phone", "")
+        
+        summary = f"User: {user_name} | Email: {user_email} | Phone: {user_phone}\n\n"
+        
+        # Determine if user is communicating in Hinglish
+        language_preference = "English"
+        hinglish_indicators = ["मैं", "हमें", "मेरा", "आप", "कैसे", "क्या", "नहीं", "है", "करना", "चाहिए"]
+        if any(any(hindi_word in msg.get("content", "").lower() for hindi_word in hinglish_indicators)
+              for msg in recent_history if msg.get("role") == "user"):
+            language_preference = "Hinglish"
+            
+        summary += f"Language preference: {language_preference}. "
+        
+        # Simple keyword-based extraction for status
+        service_type = "Private Limited company registration"
+        for msg in recent_history:
+            if msg.get("role") == "user" and "content" in msg:
+                content = msg["content"].lower()
+                if "llp" in content or "limited liability partnership" in content:
+                    service_type = "LLP registration"
+                elif "opc" in content or "one person company" in content:
+                    service_type = "OPC registration"
+        
+        summary += f"Interested in {service_type}. "
+        
+        # Add document and payment status
+        if session_id in document_status:
+            doc_status = "Document verification in progress. "
+            if document_status[session_id].get("verified"):
+                doc_status = "Document verified successfully. "
+            summary += doc_status
+            
+        if session_id in payment_status:
+            payment_info = "Payment pending. "
+            if payment_status[session_id].get("completed"):
+                payment_info = "Payment completed successfully. "
+            summary += payment_info
+        
+        # Generate a short context (max 200 chars) for quick reference
+        short_context = f"{user_name or 'User'} is interested in {service_type}. "
+        
+        if session_id in document_status:
+            if document_status[session_id].get("verified"):
+                short_context += "Document verified. "
+            elif document_status[session_id].get("pending"):
+                short_context += "Awaiting document. "
+        
+        if session_id in payment_status:
+            if payment_status[session_id].get("completed"):
+                short_context += "Payment completed."
+            elif payment_status[session_id].get("pending"):
+                short_context += "Payment pending."
+        
+        short_context += f" Lang: {language_preference}."
+        
+        return {
+            "summary": summary,
+            "short_context": short_context[:200]  # Ensure it's not longer than 200 chars
+        }
 
 # Helper functions
 async def send_bot_message(websocket: WebSocket, text: str, message_type: str = "message"):
@@ -97,22 +303,45 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
     """Process a user message using the appropriate agent."""
     logger.info(f"Processing message for session {session_id}: {message[:50]}...")
     
-    # Add to chat history
-    if session_id not in chat_histories:
-        chat_histories[session_id] = []
-    
-    chat_histories[session_id].append({"role": "user", "content": message})
+    # Add to chat history (memory or database)
+    if DB_AVAILABLE:
+        # Add message to database
+        UserProfile.add_message_to_conversation(session_id, {"role": "user", "content": message})
+    else:
+        # Add to in-memory chat history
+        if session_id not in chat_histories:
+            chat_histories[session_id] = []
+        
+        chat_histories[session_id].append({"role": "user", "content": message})
     
     # Determine which agent to use based on conversation state
     agent_to_use = sales_agent  # Default to sales agent
     
+    # Get document and payment status (from DB or memory)
+    doc_pending = False
+    payment_pending = False
+    
+    if DB_AVAILABLE:
+        user_data = UserProfile.get_by_session(session_id)
+        if user_data:
+            if "document" in user_data:
+                doc_pending = user_data["document"].get("pending", False)
+            if "payment" in user_data:
+                payment_pending = user_data["payment"].get("pending", False)
+    else:
+        # Use in-memory storage
+        if session_id in document_status:
+            doc_pending = document_status[session_id].get("pending", False)
+        if session_id in payment_status:
+            payment_pending = payment_status[session_id].get("pending", False)
+    
     # If we're at the document verification stage
-    if session_id in document_status and document_status[session_id].get("pending", False):
+    if doc_pending:
         agent_to_use = document_verification_agent
         logger.info(f"Using document verification agent for session {session_id}")
     
     # If we're at the payment stage
-    elif session_id in payment_status and payment_status[session_id].get("pending", False):
+    elif payment_pending:
         agent_to_use = payment_agent
         logger.info(f"Using payment agent for session {session_id}")
     else:
@@ -122,70 +351,183 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
     try:
         # Prepare context from chat history with metadata if available
         context_lines = []
-        for m in chat_histories[session_id][-5:]:
-            if "metadata" in m:
-                # Include metadata in a structured way
-                metadata_str = "\n".join([f"  {k}: {v}" for k, v in m["metadata"].items()])
-                context_lines.append(f"{m['role']} (with metadata):\nMessage: {m['content']}\nMetadata:\n{metadata_str}")
-            else:
-                context_lines.append(f"{m['role']}: {m['content']}")
+        
+        if DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(session_id)
+            if user_data and "conversation" in user_data:
+                # Get the last 5 messages
+                recent_messages = user_data["conversation"][-5:] if len(user_data["conversation"]) > 5 else user_data["conversation"]
+                
+                for m in recent_messages:
+                    if "metadata" in m:
+                        # Include metadata in a structured way
+                        metadata_str = "\n".join([f"  {k}: {v}" for k, v in m["metadata"].items()])
+                        context_lines.append(f"{m['role']} (with metadata):\nMessage: {m['content']}\nMetadata:\n{metadata_str}")
+                    else:
+                        context_lines.append(f"{m['role']}: {m['content']}")
+                
+                # Add context summary if available
+                if "context_summary" in user_data:
+                    context_lines.append(f"Context Summary: {user_data['context_summary']}")
+        else:
+            # Use in-memory chat history
+            if session_id in chat_histories:
+                for m in chat_histories[session_id][-5:]:
+                    if "metadata" in m:
+                        # Include metadata in a structured way
+                        metadata_str = "\n".join([f"  {k}: {v}" for k, v in m["metadata"].items()])
+                        context_lines.append(f"{m['role']} (with metadata):\nMessage: {m['content']}\nMetadata:\n{metadata_str}")
+                    else:
+                        context_lines.append(f"{m['role']}: {m['content']}")
         
         context = "\n".join(context_lines)
         
-        # Add user info to context if available
-        if session_id in user_info:
-            context += f"\nUser info: {json.dumps(user_info[session_id])}"
-        
-        # Add document status to context if available
-        if session_id in document_status:
-            context += f"\nDocument status: {json.dumps(document_status[session_id])}"
+        # Add user info to context
+        if DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(session_id)
+            if user_data:
+                # Extract user info from user_data
+                user_info_data = {k: v for k, v in user_data.items() if k not in ["conversation", "document", "payment", "context_summary"]}
+                if user_info_data:
+                    # Convert MongoDB data to JSON serializable format
+                    serializable_data = mongo_to_json_serializable(user_info_data)
+                    context += f"\nUser info: {json.dumps(serializable_data)}"
+                
+                # Add document status
+                if "document" in user_data:
+                    # Convert MongoDB data to JSON serializable format
+                    serializable_doc = mongo_to_json_serializable(user_data['document'])
+                    context += f"\nDocument status: {json.dumps(serializable_doc)}"
+                
+                # Add payment status
+                if "payment" in user_data:
+                    # Convert MongoDB data to JSON serializable format
+                    serializable_payment = mongo_to_json_serializable(user_data['payment'])
+                    context += f"\nPayment status: {json.dumps(serializable_payment)}"
+        else:
+            # Use in-memory storage
+            if session_id in user_info:
+                context += f"\nUser info: {json.dumps(user_info[session_id])}"
             
-        # Add payment status to context if available
-        if session_id in payment_status:
-            context += f"\nPayment status: {json.dumps(payment_status[session_id])}"
+            if session_id in document_status:
+                context += f"\nDocument status: {json.dumps(document_status[session_id])}"
+                
+            if session_id in payment_status:
+                context += f"\nPayment status: {json.dumps(payment_status[session_id])}"
         
         # Create the prompt with agent-specific instructions
         agent_type = "sales"
-        if session_id in document_status and document_status[session_id].get("pending", False):
+        if doc_pending:
             agent_type = "document verification"
-        elif session_id in payment_status and payment_status[session_id].get("pending", False):
+        elif payment_pending:
             agent_type = "payment"
+        
+        # Determine language preference from conversation or user data
+        language_preference = "English"
+        hinglish_indicators = ["मैं", "हमें", "मेरा", "आप", "कैसे", "क्या", "नहीं", "है", "करना", "चाहिए"]
+        
+        # Check for Hinglish in current message
+        if any(hindi_word in message.lower() for hindi_word in hinglish_indicators):
+            language_preference = "Hinglish"
+        # Otherwise check in user data if available
+        elif DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(session_id)
+            if user_data and "short_context" in user_data and "Lang: Hinglish" in user_data["short_context"]:
+                language_preference = "Hinglish"
             
-        # Create the prompt
-        prompt = f"Context:\n{context}\n\nUser's latest message: {message}\n\nRespond as a {agent_type} agent."
+        # Create the prompt with language preference
+        prompt = f"""Context:
+{context}
+
+User's latest message: {message}
+
+Respond as a {agent_type} agent.
+Language preference: {language_preference}.
+If language preference is Hinglish, respond in conversational Hindi-English mixed language, using a natural and friendly tone like a human CA would speak to a client from North India.
+"""
         
         # Prepare tool parameters for document verification and payment agents
         tool_params = {}
         
         # For payment agent, include payment info
-        if agent_type == "payment" and session_id in payment_status:
-            payment_info = payment_status[session_id]
-            if "payment_id" in payment_info:
-                tool_params["payment_id"] = payment_info["payment_id"]
-            if "link" in payment_info:
-                tool_params["payment_link"] = payment_info["link"]
+        if agent_type == "payment":
+            if DB_AVAILABLE:
+                user_data = UserProfile.get_by_session(session_id)
+                if user_data and "payment" in user_data:
+                    payment_info = user_data["payment"]
+                    if "payment_id" in payment_info:
+                        tool_params["payment_id"] = payment_info["payment_id"]
+                    if "link" in payment_info:
+                        tool_params["payment_link"] = payment_info["link"]
+            else:
+                # Use in-memory storage
+                if session_id in payment_status:
+                    payment_info = payment_status[session_id]
+                    if "payment_id" in payment_info:
+                        tool_params["payment_id"] = payment_info["payment_id"]
+                    if "link" in payment_info:
+                        tool_params["payment_link"] = payment_info["link"]
             
         # For document agent, include document info
-        if agent_type == "document verification" and session_id in document_status:
-            doc_info = document_status[session_id]
-            if "file_path" in doc_info:
-                tool_params["document_path"] = doc_info["file_path"]
-            if "analysis" in doc_info:
-                tool_params["analysis"] = doc_info["analysis"]
+        if agent_type == "document verification":
+            if DB_AVAILABLE:
+                user_data = UserProfile.get_by_session(session_id)
+                if user_data and "document" in user_data:
+                    doc_info = user_data["document"]
+                    if "file_path" in doc_info:
+                        tool_params["document_path"] = doc_info["file_path"]
+                    if "analysis" in doc_info:
+                        tool_params["analysis"] = doc_info["analysis"]
+            else:
+                # Use in-memory storage
+                if session_id in document_status:
+                    doc_info = document_status[session_id]
+                    if "file_path" in doc_info:
+                        tool_params["document_path"] = doc_info["file_path"]
+                    if "analysis" in doc_info:
+                        tool_params["analysis"] = doc_info["analysis"]
+        
+        # Get or create thread ID for this session
+        thread_id = None
+        if DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(session_id)
+            if user_data and "thread_id" in user_data:
+                thread_id = user_data["thread_id"]
+                logger.info(f"Using existing thread ID from database: {thread_id}")
+            else:
+                # Generate a new thread ID for this user
+                thread_id = f"thread_{session_id}"
+                # Store in database
+                UserProfile.create_or_update(session_id, {"thread_id": thread_id})
+                logger.info(f"Created new thread ID in database: {thread_id}")
+        else:
+            # Use in-memory storage
+            if session_id in thread_ids:
+                thread_id = thread_ids[session_id]
+                logger.info(f"Using existing thread ID from memory: {thread_id}")
+            else:
+                # Generate a new thread ID for this user
+                thread_id = f"thread_{session_id}"
+                thread_ids[session_id] = thread_id
+                logger.info(f"Created new thread ID in memory: {thread_id}")
         
         # Run the agent with tool parameters if available
-        logger.info(f"Running {agent_type} agent with prompt: {prompt[:100]}...")
+        logger.info(f"Running {agent_type} agent with prompt: {prompt[:100]}... using thread ID: {thread_id}")
         if tool_params:
             logger.info(f"Including tool parameters: {tool_params}")
-            result = await Runner.run(agent_to_use, input=prompt, tool_params=tool_params)
+            result = await Runner.run(agent_to_use, input=prompt, tool_params=tool_params, thread_id=thread_id)
         else:
-            result = await Runner.run(agent_to_use, input=prompt)
+            result = await Runner.run(agent_to_use, input=prompt, thread_id=thread_id)
             
         response = result.final_output
         logger.info(f"Agent response: {response[:100]}...")
         
         # Add to chat history
-        chat_histories[session_id].append({"role": "assistant", "content": response})
+        if DB_AVAILABLE:
+            UserProfile.add_message_to_conversation(session_id, {"role": "assistant", "content": response})
+        else:
+            # Add to in-memory chat history
+            chat_histories[session_id].append({"role": "assistant", "content": response})
         
         # Send response to client
         await send_bot_message(websocket, response)
@@ -205,8 +547,12 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
                         # Request document upload
                         await request_document_upload(websocket)
                         
-                        # Update document status - session_id is used directly for the active connection
-                        document_status[session_id] = {"pending": True}
+                        # Update document status in DB or memory
+                        if DB_AVAILABLE:
+                            UserProfile.update_document_info(session_id, {"pending": True})
+                        else:
+                            document_status[session_id] = {"pending": True}
+                            
                         logger.info(f"Requested document upload for session {session_id} via tool call")
                         break
         
@@ -219,10 +565,13 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
             # Request document upload
             await request_document_upload(websocket)
             
-            # Update document status - session_id is used directly for the active connection
-            document_status[session_id] = {"pending": True}
+            # Update document status in DB or memory
+            if DB_AVAILABLE:
+                UserProfile.update_document_info(session_id, {"pending": True})
+            else:
+                document_status[session_id] = {"pending": True}
+                
             logger.info(f"Requested document upload for session {session_id}")
-            logger.info(f"Requested document upload from client")
             
         elif "payment link" in response.lower() and any(link_text in response.lower() for link_text in ["rzp.io", "http", "pay now"]):
             # Extract payment link with regex
@@ -240,8 +589,13 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
                 # Send payment link to client
                 await send_payment_link(websocket, payment_link)
                 
-                # Update payment status - session_id is used directly for the active connection
-                payment_status[session_id] = {"pending": True, "link": payment_link}
+                # Update payment status in DB or memory
+                payment_data = {"pending": True, "link": payment_link}
+                if DB_AVAILABLE:
+                    UserProfile.update_payment_info(session_id, payment_data)
+                else:
+                    payment_status[session_id] = payment_data
+                    
                 logger.info(f"Sent payment link to session {session_id}: {payment_link}")
         
         # Extract and store user info if detected in the conversation
@@ -259,9 +613,15 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
                 name_match = re.search(pattern, message, re.IGNORECASE)
                 if name_match:
                     name = name_match.group(1)
-                    if session_id not in user_info:
-                        user_info[session_id] = {}
-                    user_info[session_id]["name"] = name
+                    
+                    # Store in DB or memory
+                    if DB_AVAILABLE:
+                        UserProfile.create_or_update(session_id, {"name": name})
+                    else:
+                        if session_id not in user_info:
+                            user_info[session_id] = {}
+                        user_info[session_id]["name"] = name
+                        
                     logger.info(f"Extracted name for session {session_id}: {name}")
                     break
         
@@ -272,9 +632,15 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
             email_match = re.search(email_pattern, message)
             if email_match:
                 email = email_match.group(0)
-                if session_id not in user_info:
-                    user_info[session_id] = {}
-                user_info[session_id]["email"] = email
+                
+                # Store in DB or memory
+                if DB_AVAILABLE:
+                    UserProfile.create_or_update(session_id, {"email": email})
+                else:
+                    if session_id not in user_info:
+                        user_info[session_id] = {}
+                    user_info[session_id]["email"] = email
+                    
                 logger.info(f"Extracted email for session {session_id}: {email}")
         
         # Try to extract phone number (simple pattern for Indian numbers)
@@ -289,11 +655,31 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
                 phone_match = re.search(pattern, message)
                 if phone_match:
                     phone = phone_match.group(0)
-                    if session_id not in user_info:
-                        user_info[session_id] = {}
-                    user_info[session_id]["phone"] = phone
+                    
+                    # Store in DB or memory
+                    if DB_AVAILABLE:
+                        UserProfile.create_or_update(session_id, {"phone": phone})
+                    else:
+                        if session_id not in user_info:
+                            user_info[session_id] = {}
+                        user_info[session_id]["phone"] = phone
+                        
                     logger.info(f"Extracted phone for session {session_id}: {phone}")
                     break
+        
+        # After every 5 messages, generate and update context summary
+        if DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(session_id)
+            if user_data and "conversation" in user_data:
+                if len(user_data["conversation"]) % 5 == 0:
+                    # Generate and store context summary
+                    context_data = await generate_context_summary(session_id)
+                    UserProfile.update_context_summary(
+                        session_id,
+                        context_data["summary"],
+                        context_data["short_context"]
+                    )
+                    logger.info(f"Updated context summary for session {session_id}")
         
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}", exc_info=True)
@@ -301,49 +687,110 @@ async def process_message(session_id: str, message: str, websocket: WebSocket):
 
 async def handle_inactivity(session_id: str, websocket: WebSocket, context: Optional[str] = None):
     """Handle user inactivity with AI-generated follow-ups based on conversation context."""
-    if session_id not in chat_histories:
-        return
-    
     logger.info(f"Handling inactivity for session {session_id}")
+    
+    # Check if session exists
+    if DB_AVAILABLE:
+        user_data = UserProfile.get_by_session(session_id)
+        if not user_data or "conversation" not in user_data:
+            return
+    else:
+        if session_id not in chat_histories:
+            return
     
     # Determine which agent to use based on conversation state
     agent_to_use = sales_agent  # Default to sales agent
     agent_type = "sales"
     
+    # Get document and payment status from DB or memory
+    doc_pending = False
+    payment_pending = False
+    
+    if DB_AVAILABLE:
+        user_data = UserProfile.get_by_session(session_id)
+        if user_data:
+            if "document" in user_data:
+                doc_pending = user_data["document"].get("pending", False)
+            if "payment" in user_data:
+                payment_pending = user_data["payment"].get("pending", False)
+    else:
+        if session_id in document_status:
+            doc_pending = document_status[session_id].get("pending", False)
+        if session_id in payment_status:
+            payment_pending = payment_status[session_id].get("pending", False)
+    
     # If we're at the document verification stage
-    if session_id in document_status and document_status[session_id].get("pending", False):
+    if doc_pending:
         agent_to_use = document_verification_agent
         agent_type = "document verification"
     
     # If we're at the payment stage
-    elif session_id in payment_status and payment_status[session_id].get("pending", False):
+    elif payment_pending:
         agent_to_use = payment_agent
         agent_type = "payment"
     
     try:
-        # Prepare context from chat history (use last 5 messages for relevant context)
+        # Prepare context from chat history
         context_lines = []
-        for m in chat_histories[session_id][-5:]:
-            if "metadata" in m:
-                # Include metadata in a structured way
-                metadata_str = "\n".join([f"  {k}: {v}" for k, v in m["metadata"].items()])
-                context_lines.append(f"{m['role']} (with metadata):\nMessage: {m['content']}\nMetadata:\n{metadata_str}")
-            else:
-                context_lines.append(f"{m['role']}: {m['content']}")
+        
+        if DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(session_id)
+            if user_data and "conversation" in user_data:
+                recent_messages = user_data["conversation"][-5:] if len(user_data["conversation"]) > 5 else user_data["conversation"]
+                
+                for m in recent_messages:
+                    if "metadata" in m:
+                        # Include metadata in a structured way
+                        metadata_str = "\n".join([f"  {k}: {v}" for k, v in m["metadata"].items()])
+                        context_lines.append(f"{m['role']} (with metadata):\nMessage: {m['content']}\nMetadata:\n{metadata_str}")
+                    else:
+                        context_lines.append(f"{m['role']}: {m['content']}")
+                
+                # Add context summary if available
+                if "context_summary" in user_data:
+                    context_lines.append(f"Context Summary: {user_data['context_summary']}")
+        else:
+            for m in chat_histories[session_id][-5:]:
+                if "metadata" in m:
+                    # Include metadata in a structured way
+                    metadata_str = "\n".join([f"  {k}: {v}" for k, v in m["metadata"].items()])
+                    context_lines.append(f"{m['role']} (with metadata):\nMessage: {m['content']}\nMetadata:\n{metadata_str}")
+                else:
+                    context_lines.append(f"{m['role']}: {m['content']}")
         
         conversation_context = "\n".join(context_lines)
         
-        # Add user info to context if available
-        if session_id in user_info:
-            conversation_context += f"\nUser info: {json.dumps(user_info[session_id])}"
-        
-        # Add document status to context if available
-        if session_id in document_status:
-            conversation_context += f"\nDocument status: {json.dumps(document_status[session_id])}"
+        # Add user info, document status, payment status
+        if DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(session_id)
+            if user_data:
+                # Extract user info
+                user_info_data = {k: v for k, v in user_data.items() if k not in ["conversation", "document", "payment", "context_summary"]}
+                if user_info_data:
+                    # Convert MongoDB data to JSON serializable format
+                    serializable_data = mongo_to_json_serializable(user_info_data)
+                    conversation_context += f"\nUser info: {json.dumps(serializable_data)}"
+                
+                # Add document status
+                if "document" in user_data:
+                    # Convert MongoDB data to JSON serializable format
+                    serializable_doc = mongo_to_json_serializable(user_data['document'])
+                    conversation_context += f"\nDocument status: {json.dumps(serializable_doc)}"
+                
+                # Add payment status
+                if "payment" in user_data:
+                    # Convert MongoDB data to JSON serializable format
+                    serializable_payment = mongo_to_json_serializable(user_data['payment'])
+                    conversation_context += f"\nPayment status: {json.dumps(serializable_payment)}"
+        else:
+            if session_id in user_info:
+                conversation_context += f"\nUser info: {json.dumps(user_info[session_id])}"
             
-        # Add payment status to context if available
-        if session_id in payment_status:
-            conversation_context += f"\nPayment status: {json.dumps(payment_status[session_id])}"
+            if session_id in document_status:
+                conversation_context += f"\nDocument status: {json.dumps(document_status[session_id])}"
+                
+            if session_id in payment_status:
+                conversation_context += f"\nPayment status: {json.dumps(payment_status[session_id])}"
         
         # Special context information for specific scenarios
         additional_context = ""
@@ -376,19 +823,53 @@ Generate a natural, contextually relevant follow-up message that:
 Your follow-up message:
 """
         
+        # Get thread ID for this session - ensure we use the same thread for follow-ups
+        thread_id = None
+        if DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(session_id)
+            if user_data and "thread_id" in user_data:
+                thread_id = user_data["thread_id"]
+                logger.info(f"Using existing thread ID for follow-up: {thread_id}")
+            else:
+                # Generate a new thread ID if for some reason we don't have one
+                thread_id = f"thread_{session_id}"
+                # Store in database
+                UserProfile.create_or_update(session_id, {"thread_id": thread_id})
+                logger.info(f"Created new thread ID for follow-up: {thread_id}")
+        else:
+            # Use in-memory storage
+            if session_id in thread_ids:
+                thread_id = thread_ids[session_id]
+                logger.info(f"Using existing thread ID for follow-up: {thread_id}")
+            else:
+                # Generate a new thread ID if for some reason we don't have one
+                thread_id = f"thread_{session_id}"
+                thread_ids[session_id] = thread_id
+                logger.info(f"Created new thread ID for follow-up: {thread_id}")
+        
         # Run the agent to generate the follow-up
-        logger.info(f"Generating context-aware follow-up with {agent_type} agent...")
-        result = await Runner.run(agent_to_use, input=inactivity_prompt)
+        logger.info(f"Generating context-aware follow-up with {agent_type} agent using thread ID: {thread_id}...")
+        result = await Runner.run(agent_to_use, input=inactivity_prompt, thread_id=thread_id)
         follow_up_message = result.final_output
         
         logger.info(f"AI-generated follow-up: {follow_up_message[:50]}...")
         
         # Add to chat history
-        chat_histories[session_id].append({
-            "role": "assistant",
-            "content": follow_up_message,
-            "metadata": {"type": "inactivity_follow_up", "context": context or "general"}
-        })
+        if DB_AVAILABLE:
+            UserProfile.add_message_to_conversation(
+                session_id, 
+                {
+                    "role": "assistant",
+                    "content": follow_up_message,
+                    "metadata": {"type": "inactivity_follow_up", "context": context or "general"}
+                }
+            )
+        else:
+            chat_histories[session_id].append({
+                "role": "assistant",
+                "content": follow_up_message,
+                "metadata": {"type": "inactivity_follow_up", "context": context or "general"}
+            })
         
         # Send follow-up message
         if websocket.client_state == WebSocketState.CONNECTED:
@@ -424,17 +905,51 @@ async def websocket_endpoint(websocket: WebSocket):
         }))
         logger.info(f"Sent session ID to client: {session_id}")
         
+        # Create user profile in database if available
+        if DB_AVAILABLE:
+            UserProfile.create_or_update(session_id, {
+                "created_at": datetime.now().isoformat(),
+                "last_active": datetime.now().isoformat()
+            })
+        
         while True:
             data = await websocket.receive_text()
             data_json = json.loads(data)
             
             # Check if session_id is provided in the message (for reconnects)
-            if "session_id" in data_json and data_json["session_id"] in chat_histories:
-                session_id = data_json["session_id"]
-                active_connections[session_id] = websocket
-                logger.info(f"Reconnected session: {session_id}")
+            if "session_id" in data_json:
+                provided_session_id = data_json["session_id"]
+                
+                if DB_AVAILABLE:
+                    # Check if session exists in DB
+                    user_data = UserProfile.get_by_session(provided_session_id)
+                    if user_data:
+                        session_id = provided_session_id
+                        active_connections[session_id] = websocket
+                        logger.info(f"Reconnected session from DB: {session_id}")
+                        
+                        # If this session has a short context, display it as a greeting
+                        if "short_context" in user_data:
+                            greeting = f"Welcome back! I see you were interested in {user_data.get('short_context', 'company registration')}. How can I help you today?"
+                            await send_bot_message(websocket, greeting)
+                else:
+                    # Check in-memory data
+                    if provided_session_id in chat_histories:
+                        session_id = provided_session_id
+                        active_connections[session_id] = websocket
+                        logger.info(f"Reconnected session: {session_id}")
+            
+            # Track device information if provided
+            if "device_info" in data_json and DB_AVAILABLE:
+                device_info = data_json["device_info"]
+                UserProfile.track_device(session_id, device_info)
+                logger.info(f"Tracked device info for session {session_id}: {device_info.get('device_id', 'unknown')}")
             
             if data_json["type"] == "message":
+                # Update last active timestamp in DB if available
+                if DB_AVAILABLE:
+                    UserProfile.create_or_update(session_id, {"last_active": datetime.now().isoformat()})
+                
                 # Process user message
                 await process_message(session_id, data_json["text"], websocket)
             elif data_json["type"] == "inactive":
@@ -464,8 +979,12 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
         actual_session_id = session_id
     else:
         # If the session ID isn't directly in active_connections,
-        # check if it's a key in chat_histories (may have been added earlier)
-        if session_id in chat_histories:
+        # check if it's a key in chat_histories or DB
+        if DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(session_id)
+            if user_data:
+                actual_session_id = session_id
+        elif session_id in chat_histories:
             actual_session_id = session_id
         else:
             # Check if the session ID has a prefix like "session_"
@@ -483,11 +1002,15 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
             # As a fallback, if we still can't find the session ID, log an error
             if not actual_session_id:
                 # Final attempt: check for recently active sessions that might match
-                for conn_id in chat_histories:
-                    if session_id.endswith(conn_id[-8:]) or conn_id.endswith(session_id[-8:]):
-                        actual_session_id = conn_id
-                        logger.info(f"Mapped session ID {session_id} to {actual_session_id} by partial match")
-                        break
+                if DB_AVAILABLE:
+                    # Check in DB for partial match (not implemented in this MVP)
+                    pass
+                else:
+                    for conn_id in chat_histories:
+                        if session_id.endswith(conn_id[-8:]) or conn_id.endswith(session_id[-8:]):
+                            actual_session_id = conn_id
+                            logger.info(f"Mapped session ID {session_id} to {actual_session_id} by partial match")
+                            break
                 
                 if not actual_session_id:
                     logger.warning(f"Document upload for unknown session {session_id}, document will not be processed")
@@ -506,32 +1029,56 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
     
     logger.info(f"Document saved to {file_path}")
     
-    # Update document status - using actual_session_id
-    document_status[actual_session_id] = {
+    # Store in Cloudinary if available
+    cloudinary_url = None
+    if CLOUDINARY_AVAILABLE and cloudinary_storage and cloudinary_storage.is_available:
+        try:
+            cloudinary_result = await cloudinary_storage.upload_document(file_path)
+            if cloudinary_result:
+                cloudinary_url = cloudinary_result["secure_url"]
+                logger.info(f"Document uploaded to Cloudinary: {cloudinary_url}")
+        except Exception as e:
+            logger.error(f"Failed to upload to Cloudinary: {str(e)}")
+    
+    # Update document status in DB or memory
+    document_data = {
         "pending": False,
         "file_path": file_path,
         "filename": document.filename,
         "uploaded_at": datetime.now().isoformat()
     }
     
+    if cloudinary_url:
+        document_data["cloudinary_url"] = cloudinary_url
+    
+    if DB_AVAILABLE:
+        UserProfile.update_document_info(actual_session_id, document_data)
+    else:
+        document_status[actual_session_id] = document_data
+    
     # Process document with vision API
     try:
         # Convert local path to URL for the API
-        # For a production app, you would upload this to cloud storage and use a public URL
-        # For MVP, we use a file:// URL which OpenAI's API can handle in some cases
         document_url = f"file://{os.path.abspath(file_path)}"
         
         if os.environ.get("OPENAI_API_KEY"):
             # Verify document
             logger.info(f"Verifying document: {document_url}")
-            verification_result = await verify_document_with_vision(document_url)
+            verification_result = await verify_document_with_vision(document_url, actual_session_id)
             
-            # Update document status
-            document_status[actual_session_id].update({
+            # Update document status in DB or memory
+            updated_doc_data = {
                 "verified": verification_result["is_valid"],
                 "analysis": verification_result["analysis"],
                 "next_steps": verification_result["next_steps"]
-            })
+            }
+            
+            if DB_AVAILABLE:
+                # Update existing document info
+                UserProfile.update_document_info(actual_session_id, updated_doc_data)
+            else:
+                # Update in-memory status
+                document_status[actual_session_id].update(updated_doc_data)
             
             # Send response to client
             if actual_session_id in active_connections:
@@ -545,46 +1092,82 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
                     
                     # If document is valid, transition to payment step
                     # Generate and send payment link
-                    customer_info = user_info.get(actual_session_id, {"name": "Customer", "email": f"customer_{actual_session_id[:8]}@example.com"})
+                    user_data = None
+                    if DB_AVAILABLE:
+                        user_data = UserProfile.get_by_session(actual_session_id)
+                    
+                    if user_data:
+                        customer_info = {k: v for k, v in user_data.items() if k in ["name", "email", "phone"]}
+                    else:
+                        customer_info = user_info.get(actual_session_id, {})
+                        if not customer_info:
+                            customer_info = {"name": "Customer", "email": f"customer_{actual_session_id[:8]}@example.com"}
                     
                     payment_data = generate_razorpay_link(customer_info)
                     
                     if payment_data["success"]:
-                        payment_status[actual_session_id] = {
+                        # Store payment info in DB or memory
+                        payment_data_to_store = {
                             "pending": True,
                             "link": payment_data["payment_link"],
                             "amount": payment_data["amount"],
                             "currency": payment_data["currency"]
                         }
                         
+                        if DB_AVAILABLE:
+                            UserProfile.update_payment_info(actual_session_id, payment_data_to_store)
+                        else:
+                            payment_status[actual_session_id] = payment_data_to_store
+                        
                         # Send payment link message
-                        await send_bot_message(
-                            websocket,
-                            f"Great news! Your document has been verified and approved. To proceed with your company registration, please complete the payment of {payment_data['currency']} {payment_data['amount']} through this secure link: {payment_data['payment_link']}\n\nThis exclusive offer is only valid for the next 60 minutes, so I recommend completing the payment right away to secure your registration. Our payment process is completely secure and takes just a minute."
-                        )
+                        payment_message = f"Great news! Your document has been verified and approved. To proceed with your company registration, please complete the payment of {payment_data['currency']} {payment_data['amount']} through this secure link: {payment_data['payment_link']}\n\nThis exclusive offer is only valid for the next 60 minutes, so I recommend completing the payment right away to secure your registration. Our payment process is completely secure and takes just a minute."
+                        
+                        await send_bot_message(websocket, payment_message)
+                        
+                        # Add message to chat history
+                        if DB_AVAILABLE:
+                            UserProfile.add_message_to_conversation(actual_session_id, {"role": "assistant", "content": payment_message})
+                        else:
+                            if actual_session_id not in chat_histories:
+                                chat_histories[actual_session_id] = []
+                            chat_histories[actual_session_id].append({"role": "assistant", "content": payment_message})
                         
                         # Send payment link to show in UI
                         await send_payment_link(websocket, payment_data["payment_link"])
                 else:
                     # Document is invalid - keep document_status pending
-                    document_status[actual_session_id]["pending"] = True
+                    if DB_AVAILABLE:
+                        UserProfile.update_document_info(actual_session_id, {"pending": True})
+                    else:
+                        document_status[actual_session_id]["pending"] = True
                     
                     # Create a detailed rejection message
                     rejection_message = f"I've reviewed your document, but there seems to be an issue: {verification_result['analysis']}\n\nWe need a valid identity document (like Aadhaar, PAN card, or passport) that clearly shows your name and other details. This is a critical step for your company registration process. Could you please upload a proper identity document? It will only take a moment and ensures we can proceed with your registration without any delays."
                     
-                    # Add the document analysis to payment agent context
-                    if actual_session_id not in chat_histories:
-                        chat_histories[actual_session_id] = []
+                    # Add to chat history with metadata
+                    metadata = {
+                        "document_analysis": verification_result['analysis'],
+                        "document_status": "rejected"
+                    }
                     
-                    # Store both the rejection message and detailed document analysis
-                    chat_histories[actual_session_id].append({
-                        "role": "assistant",
-                        "content": rejection_message,
-                        "metadata": {
-                            "document_analysis": verification_result['analysis'],
-                            "document_status": "rejected"
-                        }
-                    })
+                    if DB_AVAILABLE:
+                        UserProfile.add_message_to_conversation(
+                            actual_session_id, 
+                            {
+                                "role": "assistant", 
+                                "content": rejection_message,
+                                "metadata": metadata
+                            }
+                        )
+                    else:
+                        if actual_session_id not in chat_histories:
+                            chat_histories[actual_session_id] = []
+                        
+                        chat_histories[actual_session_id].append({
+                            "role": "assistant",
+                            "content": rejection_message,
+                            "metadata": metadata
+                        })
                     
                     # Send the rejection message with enhanced logging
                     if websocket.client_state == WebSocketState.CONNECTED:
@@ -621,6 +1204,23 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
                                     websocket,
                                     specific_advice
                                 )
+                                
+                                # Add advice to chat history
+                                if DB_AVAILABLE:
+                                    UserProfile.add_message_to_conversation(
+                                        actual_session_id, 
+                                        {
+                                            "role": "assistant", 
+                                            "content": specific_advice,
+                                            "metadata": {"type": "document_advice"}
+                                        }
+                                    )
+                                else:
+                                    chat_histories[actual_session_id].append({
+                                        "role": "assistant",
+                                        "content": specific_advice,
+                                        "metadata": {"type": "document_advice"}
+                                    })
                             
                             # Request another document upload
                             await request_document_upload(websocket)
@@ -640,11 +1240,16 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
             
             if is_valid:
                 # Simulate successful verification
-                document_status[actual_session_id].update({
+                update_data = {
                     "verified": True,
                     "analysis": "Document appears to be valid (simulated).",
                     "next_steps": "proceed_to_payment"
-                })
+                }
+                
+                if DB_AVAILABLE:
+                    UserProfile.update_document_info(actual_session_id, update_data)
+                else:
+                    document_status[actual_session_id].update(update_data)
                 
                 if actual_session_id in active_connections:
                     websocket = active_connections[actual_session_id]
@@ -652,10 +1257,13 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
                     success_message = "Thank you for uploading your document! I've verified it and everything looks good. We can now proceed with the registration process."
                     
                     # Add to chat history
-                    if actual_session_id not in chat_histories:
-                        chat_histories[actual_session_id] = []
-                    
-                    chat_histories[actual_session_id].append({"role": "assistant", "content": success_message})
+                    if DB_AVAILABLE:
+                        UserProfile.add_message_to_conversation(actual_session_id, {"role": "assistant", "content": success_message})
+                    else:
+                        if actual_session_id not in chat_histories:
+                            chat_histories[actual_session_id] = []
+                        
+                        chat_histories[actual_session_id].append({"role": "assistant", "content": success_message})
                     
                     await send_bot_message(
                         websocket,
@@ -663,14 +1271,17 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
                     )
             else:
                 # Simulate failed verification
-                document_status[actual_session_id].update({
+                update_data = {
                     "verified": False,
                     "analysis": "The document appears to be unclear or invalid. This appears to be a screenshot rather than a proper identity document.",
-                    "next_steps": "request_new_document"
-                })
+                    "next_steps": "request_new_document",
+                    "pending": True  # Keep document_status pending for reupload
+                }
                 
-                # Keep document_status pending for reupload
-                document_status[actual_session_id]["pending"] = True
+                if DB_AVAILABLE:
+                    UserProfile.update_document_info(actual_session_id, update_data)
+                else:
+                    document_status[actual_session_id].update(update_data)
                 
                 if actual_session_id in active_connections:
                     websocket = active_connections[actual_session_id]
@@ -679,10 +1290,13 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
                     rejection_message = "I've reviewed your document, but there seems to be an issue: The document appears to be unclear or invalid. This appears to be a screenshot rather than a proper identity document.\n\nWe need a valid identity document (like Aadhaar, PAN card, or passport) that clearly shows your name and other details. Could you please upload a proper identity document? It will only take a moment and ensures we can proceed with your registration without any delays."
                     
                     # Add to chat history
-                    if actual_session_id not in chat_histories:
-                        chat_histories[actual_session_id] = []
-                    
-                    chat_histories[actual_session_id].append({"role": "assistant", "content": rejection_message})
+                    if DB_AVAILABLE:
+                        UserProfile.add_message_to_conversation(actual_session_id, {"role": "assistant", "content": rejection_message})
+                    else:
+                        if actual_session_id not in chat_histories:
+                            chat_histories[actual_session_id] = []
+                        
+                        chat_histories[actual_session_id].append({"role": "assistant", "content": rejection_message})
                     
                     # Send the rejection message with enhanced logging
                     if websocket.client_state == WebSocketState.CONNECTED:
@@ -711,7 +1325,16 @@ async def upload_document(document: UploadFile = File(...), session_id: str = Fo
                     # Return early as we don't want to proceed to payment
                     return {"success": True, "is_valid": False}
         
-        return {"success": True, "is_valid": document_status[actual_session_id].get("verified", False)}
+        # Get verified status from DB or memory
+        is_verified = False
+        if DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(actual_session_id)
+            if user_data and "document" in user_data:
+                is_verified = user_data["document"].get("verified", False)
+        else:
+            is_verified = document_status[actual_session_id].get("verified", False)
+        
+        return {"success": True, "is_valid": is_verified}
         
     except Exception as e:
         logger.error(f"Error processing document: {str(e)}", exc_info=True)
@@ -722,39 +1345,40 @@ async def check_payment_endpoint(payment_id: str, session_id: str):
     """Endpoint to check payment status."""
     logger.info(f"Checking payment status for: {payment_id}, session: {session_id}")
     
-    # Handle session ID from localStorage which might have a prefix
-    # or match a session ID from our active_connections
+    # Handle session ID mapping similarly to upload_document
     actual_session_id = None
     
     # If the exact session ID exists in active_connections
     if session_id in active_connections:
         actual_session_id = session_id
     else:
-        # If the session ID isn't directly in active_connections,
-        # check if it's a key in chat_histories (may have been added earlier)
-        if session_id in chat_histories:
+        # Check in DB or chat_histories
+        if DB_AVAILABLE:
+            user_data = UserProfile.get_by_session(session_id)
+            if user_data:
+                actual_session_id = session_id
+        elif session_id in chat_histories:
             actual_session_id = session_id
         else:
-            # Check if the session ID has a prefix like "session_"
-            # and if there's a matching UUID in the active connections
+            # Various fallback checks similar to upload_document
             if session_id.startswith("session_"):
-                # Extract the UUID part after the prefix
                 uuid_part = session_id.split("_", 1)[1]
-                # Look for any matching connection that ends with this UUID part
                 for conn_id in active_connections:
                     if conn_id.endswith(uuid_part):
                         actual_session_id = conn_id
                         logger.info(f"Mapped prefixed session ID {session_id} to {actual_session_id}")
                         break
             
-            # As a fallback, if we still can't find the session ID, log an error
             if not actual_session_id:
-                # Final attempt: check for recently active sessions that might match
-                for conn_id in chat_histories:
-                    if session_id.endswith(conn_id[-8:]) or conn_id.endswith(session_id[-8:]):
-                        actual_session_id = conn_id
-                        logger.info(f"Mapped session ID {session_id} to {actual_session_id} by partial match")
-                        break
+                if DB_AVAILABLE:
+                    # DB checks for partial match (not implemented in MVP)
+                    pass
+                else:
+                    for conn_id in chat_histories:
+                        if session_id.endswith(conn_id[-8:]) or conn_id.endswith(session_id[-8:]):
+                            actual_session_id = conn_id
+                            logger.info(f"Mapped session ID {session_id} to {actual_session_id} by partial match")
+                            break
                 
                 if not actual_session_id:
                     logger.warning(f"Payment check for unknown session {session_id}, payment will not be processed")
@@ -766,23 +1390,55 @@ async def check_payment_endpoint(payment_id: str, session_id: str):
     try:
         payment_result = check_payment_status(payment_id)
         
-        if actual_session_id in payment_status:
-            payment_status[actual_session_id].update({
-                "status": payment_result["status"],
-                "checked_at": datetime.now().isoformat()
+        # Update payment status in DB or memory
+        payment_update = {
+            "status": payment_result["status"],
+            "checked_at": datetime.now().isoformat()
+        }
+        
+        if payment_result["payment_completed"]:
+            payment_update.update({
+                "pending": False,
+                "completed": True,
+                "payment_id": payment_id
             })
             
-            if payment_result["payment_completed"]:
-                payment_status[actual_session_id]["pending"] = False
-                payment_status[actual_session_id]["completed"] = True
+            # Mark case as won in the database
+            if DB_AVAILABLE:
+                UserProfile.mark_case_outcome(actual_session_id, True, "Payment completed successfully")
+        
+        # Store payment update
+        if DB_AVAILABLE:
+            UserProfile.update_payment_info(actual_session_id, payment_update)
+        else:
+            if actual_session_id in payment_status:
+                payment_status[actual_session_id].update(payment_update)
+        
+        # If payment is completed, notify the user
+        if payment_result["payment_completed"]:
+            # Notify the user via WebSocket if connected
+            if actual_session_id in active_connections:
+                websocket = active_connections[actual_session_id]
+                success_message = "Fantastic news! Your payment has been successfully received. We've already started processing your company registration. You'll receive a confirmation email shortly with all the details. Thank you for choosing RegisterKaro for your company incorporation needs!"
                 
-                # Notify the user via WebSocket if connected
-                if actual_session_id in active_connections:
-                    websocket = active_connections[actual_session_id]
-                    await send_bot_message(
-                        websocket,
-                        "Fantastic news! Your payment has been successfully received. We've already started processing your company registration. You'll receive a confirmation email shortly with all the details. Thank you for choosing RegisterKaro for your company incorporation needs!"
+                # Add to chat history
+                if DB_AVAILABLE:
+                    UserProfile.add_message_to_conversation(
+                        actual_session_id, 
+                        {
+                            "role": "assistant", 
+                            "content": success_message,
+                            "metadata": {"type": "payment_confirmation"}
+                        }
                     )
+                else:
+                    chat_histories[actual_session_id].append({
+                        "role": "assistant",
+                        "content": success_message,
+                        "metadata": {"type": "payment_confirmation"}
+                    })
+                
+                await send_bot_message(websocket, success_message)
         
         return payment_result
     except Exception as e:
@@ -792,8 +1448,31 @@ async def check_payment_endpoint(payment_id: str, session_id: str):
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "version": "1.0.0"}
+    return {
+        "status": "healthy", 
+        "version": "1.0.0",
+        "db_available": DB_AVAILABLE,
+        "cloudinary_available": CLOUDINARY_AVAILABLE
+    }
 
 # Main entry point
 if __name__ == "__main__":
+    # Initialize database connection if available
+    if DB_AVAILABLE:
+        logger.info("Initializing MongoDB connection...")
+        mongo_db.initialize()
+        if mongo_db.is_connected:
+            logger.info("MongoDB connection established successfully")
+        else:
+            logger.warning("Failed to connect to MongoDB, using in-memory storage")
+    
+    # Initialize Cloudinary storage if available
+    if CLOUDINARY_AVAILABLE:
+        logger.info("Initializing Cloudinary storage...")
+        cloudinary_storage.initialize()
+        if cloudinary_storage.is_available:
+            logger.info("Cloudinary storage initialized successfully")
+        else:
+            logger.warning("Failed to initialize Cloudinary storage, using local file storage")
+    
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
