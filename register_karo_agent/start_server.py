@@ -6,9 +6,18 @@ import sys
 import logging
 import argparse
 import uvicorn
+from dotenv import load_dotenv
+
+# Resolve the path to the .env file using the script directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+env_path = os.path.join(script_dir, ".env")
+
+# Load environment variables from .env file
+load_dotenv(env_path)
+logger = logging.getLogger(__name__)
+logger.info(f"Loaded environment variables from: {env_path}")
 
 # Configure logging with absolute path
-script_dir = os.path.dirname(os.path.abspath(__file__))
 logs_dir = os.path.join(script_dir, "logs")
 os.makedirs(logs_dir, exist_ok=True)
 log_file = os.path.join(logs_dir, "register_karo.log")
@@ -26,15 +35,33 @@ logger = logging.getLogger(__name__)
 def initialize_database():
     """Initialize database connection."""
     try:
+        # Verify MongoDB environment variables are set
+        mongo_uri = os.environ.get("MONGODB_URI")
+        if not mongo_uri:
+            logger.error("MONGODB_URI environment variable is not set. Check your .env file.")
+            return False
+            
+        db_name = os.environ.get("MONGODB_DB_NAME")
+        if not db_name:
+            logger.warning("MONGODB_DB_NAME not set, using default 'registerkaro'")
+            
+        # Log partial URI for debugging (hide credentials)
+        if mongo_uri:
+            uri_parts = mongo_uri.split('@')
+            if len(uri_parts) > 1:
+                masked_uri = f"***@{uri_parts[1]}"
+                logger.info(f"Using MongoDB URI: {masked_uri}")
+                
         from database.db_connection import mongo_db
         logger.info("Initializing MongoDB connection...")
         mongo_db.initialize()
+        
         if mongo_db.is_connected:
             logger.info("MongoDB connection established successfully")
             # Create indexes for device_id, cookie_id and session_id fields for faster lookup
             from database.models import UserProfile
             coll = UserProfile.get_collection()
-            if coll:
+            if coll is not None:
                 # Ensure indexes exist
                 coll.create_index("device_id")
                 coll.create_index("cookie_id")
@@ -42,7 +69,12 @@ def initialize_database():
                 logger.info("Database indexes created successfully")
             return True
         else:
-            logger.warning("Failed to connect to MongoDB, using in-memory storage")
+            # Connection failed despite environment variables being present
+            logger.warning("Failed to connect to MongoDB despite MONGODB_URI being set. Possible issues:")
+            logger.warning("1. Network connectivity issues")
+            logger.warning("2. MongoDB server may be down")
+            logger.warning("3. Invalid credentials or connection string")
+            logger.warning("Using in-memory storage as fallback")
             return False
     except ImportError:
         logger.warning("Database modules not available, using in-memory storage")
@@ -54,14 +86,38 @@ def initialize_database():
 def initialize_storage():
     """Initialize Cloudinary storage."""
     try:
+        # Verify Cloudinary environment variables are set
+        cloud_name = os.environ.get("CLOUDINARY_CLOUD_NAME")
+        api_key = os.environ.get("CLOUDINARY_API_KEY")
+        api_secret = os.environ.get("CLOUDINARY_API_SECRET")
+        
+        # Check if all required credentials are present
+        if not all([cloud_name, api_key, api_secret]):
+            missing = []
+            if not cloud_name: missing.append("CLOUDINARY_CLOUD_NAME")
+            if not api_key: missing.append("CLOUDINARY_API_KEY")
+            if not api_secret: missing.append("CLOUDINARY_API_SECRET")
+            
+            logger.error(f"Missing Cloudinary credentials in .env file: {', '.join(missing)}")
+            return False
+        
+        logger.info(f"Using Cloudinary cloud name: {cloud_name}")
+        logger.info(f"Cloudinary API key is set (masked)")
+            
         from storage.cloudinary_storage import cloudinary_storage
         logger.info("Initializing Cloudinary storage...")
         cloudinary_storage.initialize()
+        
         if cloudinary_storage.is_available:
             logger.info("Cloudinary storage initialized successfully")
             return True
         else:
-            logger.warning("Failed to initialize Cloudinary storage, using local file storage")
+            # Connection failed despite environment variables being present
+            logger.warning("Failed to initialize Cloudinary despite credentials being set. Possible issues:")
+            logger.warning("1. Network connectivity issues")
+            logger.warning("2. Invalid credentials")
+            logger.warning("3. Cloudinary service may be unavailable")
+            logger.warning("Using local file storage as fallback")
             return False
     except ImportError:
         logger.warning("Cloudinary storage not available, using local file storage only")
