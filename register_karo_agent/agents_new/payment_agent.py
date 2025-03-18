@@ -144,28 +144,29 @@ logger = logging.getLogger(__name__)
 #     tools=[create_payment_link, verify_payment_status]  # Integrated payment tools
 # )
 
-@function_tool("create_payment_link")
-def create_payment_link(customer_name: str, email: str = "", phone: str = "", company_type: str = "private limited"):
+@function_tool
+def create_payment_link(customer_name: str, email: str, phone: str, company_type: str):
     """
     Generate a payment link for company registration based on customer details.
 
     Args:
-        customer_name: Customer's full name.
-        email: Customer's email address (optional).
-        phone: Customer's phone number (optional).
-        company_type: Type of company to register (e.g., "private limited", "llp", "opc").
+        customer_name: Customer's full name
+        email: Customer's email address
+        phone: Customer's phone number
+        company_type: Type of company to register (e.g., "private limited", "llp", "opc")
 
     Returns:
-        Dictionary containing payment link details or an error message.
+        Dictionary containing payment link details or an error message
     """
     logger.info(f"Creating payment link for {customer_name}, company type: {company_type}")
 
     # Build customer info dictionary
+    # Use sensible defaults for any possibly empty parameters
     customer_info = {
-        "name": customer_name,
-        "email": email,
-        "phone": phone,
-        "company_type": company_type
+        "name": customer_name or "Customer",
+        "email": email or "",
+        "phone": phone or "",
+        "company_type": company_type or "private limited"
     }
     
     # Generate the payment link using the Razorpay integration

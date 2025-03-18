@@ -624,27 +624,121 @@ If language preference is Hinglish, respond in conversational Hindi-English mixe
         
         # Check if the agent used any tools
         document_upload_requested = False
+        payment_link_requested = False
+        payment_status_check_requested = False
         
         # Extract tool call information from the result's extra info
         if hasattr(result, 'extra_info') and isinstance(result.extra_info, dict):
             tools_called = result.extra_info.get('tools_called', [])
             
-            # Check if document upload tool was called
+            # Check which tools were called
             if isinstance(tools_called, list):
                 for tool_call in tools_called:
-                    if isinstance(tool_call, dict) and tool_call.get('name') == 'upload_document':
-                        document_upload_requested = True
-                        # Request document upload
-                        await request_document_upload(websocket)
-                        
-                        # Update document status in DB or memory
-                        if DB_AVAILABLE:
-                            UserProfile.update_document_info(session_id, {"pending": True})
-                        else:
-                            document_status[session_id] = {"pending": True}
+                    if isinstance(tool_call, dict):
+                        # Document upload tool
+                        if tool_call.get('name') == 'upload_document':
+                            document_upload_requested = True
+                            # Request document upload
+                            await request_document_upload(websocket)
                             
-                        logger.info(f"Requested document upload for session {session_id} via tool call")
-                        break
+                            # Update document status in DB or memory
+                            if DB_AVAILABLE:
+                                UserProfile.update_document_info(session_id, {"pending": True})
+                            else:
+                                document_status[session_id] = {"pending": True}
+                                
+                            logger.info(f"Requested document upload for session {session_id} via tool call")
+                        
+                        # Payment link generation tool
+                        elif tool_call.get('name') == 'create_payment_link':
+                            payment_link_requested = True
+                            
+                            # Get customer info from tool arguments or database
+                            customer_info = tool_call.get('arguments', {})
+                            if not customer_info or not isinstance(customer_info, dict):
+                                # Fallback to database or memory
+                                if DB_AVAILABLE:
+                                    user_data = UserProfile.get_by_session(session_id)
+                                    if user_data:
+                                        customer_info = {k: v for k, v in user_data.items() if k in ["name", "email", "phone", "company_type"]}
+                                else:
+                                    customer_info = user_info.get(session_id, {})
+                            
+                            logger.info(f"Generating payment link with customer info: {customer_info}")
+                            
+                            # Generate payment link
+                            payment_data = generate_razorpay_link(customer_info)
+                            
+                            if payment_data["success"]:
+                                # Store payment info in DB or memory
+                                payment_data_to_store = {
+                                    "pending": True,
+                                    "payment_id": payment_data["payment_id"],
+                                    "link": payment_data["payment_link"],
+                                    "amount": payment_data["amount"],
+                                    "currency": payment_data["currency"]
+                                }
+                                
+                                if DB_AVAILABLE:
+                                    UserProfile.update_payment_info(session_id, payment_data_to_store)
+                                else:
+                                    payment_status[session_id] = payment_data_to_store
+                                
+                                # Send payment link to client
+                                await send_payment_link(websocket, payment_data["payment_link"])
+                                logger.info(f"Payment link sent to client: {payment_data['payment_link']}")
+                            else:
+                                logger.error(f"Failed to generate payment link: {payment_data.get('error', 'Unknown error')}")
+                        
+                        # Payment status check tool
+                        elif tool_call.get('name') == 'verify_payment_status':
+                            payment_status_check_requested = True
+                            
+                            # Get payment ID from tool arguments or database
+                            payment_id = None
+                            if isinstance(tool_call.get('arguments'), dict):
+                                payment_id = tool_call.get('arguments', {}).get('payment_id')
+                            
+                            if not payment_id:
+                                # Fallback to database or memory
+                                if DB_AVAILABLE:
+                                    user_data = UserProfile.get_by_session(session_id)
+                                    if user_data and "payment" in user_data:
+                                        payment_id = user_data["payment"].get("payment_id")
+                                else:
+                                    if session_id in payment_status:
+                                        payment_id = payment_status[session_id].get("payment_id")
+                            
+                            if payment_id:
+                                logger.info(f"Checking payment status for ID: {payment_id}")
+                                
+                                # Check payment status
+                                payment_result = check_payment_status(payment_id)
+                                
+                                if payment_result["success"]:
+                                    # Update payment status in DB or memory
+                                    payment_update = {
+                                        "status": payment_result["status"],
+                                        "checked_at": datetime.now().isoformat()
+                                    }
+                                    
+                                    if payment_result["payment_completed"]:
+                                        payment_update.update({
+                                            "pending": False,
+                                            "completed": True
+                                        })
+                                    
+                                    if DB_AVAILABLE:
+                                        UserProfile.update_payment_info(session_id, payment_update)
+                                    else:
+                                        if session_id in payment_status:
+                                            payment_status[session_id].update(payment_update)
+                                    
+                                    logger.info(f"Updated payment status: {payment_update}")
+                                else:
+                                    logger.error(f"Failed to check payment status: {payment_result.get('error', 'Unknown error')}")
+                            else:
+                                logger.warning(f"No payment ID found for session {session_id}")
         
         # Fallback: Also check for document-related keywords in the response text
         if not document_upload_requested and any(keyword in response.lower() for keyword in [

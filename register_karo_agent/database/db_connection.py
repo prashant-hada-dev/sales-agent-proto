@@ -40,7 +40,7 @@ class MongoDB:
             self._client = MongoClient(
                 mongo_uri,
                 ssl=True,
-                ssl_cert_reqs='CERT_NONE',  # Skip certificate validation
+                tlsAllowInvalidCertificates=True,  # Updated parameter name for certificate validation
                 serverSelectionTimeoutMS=5000,  # Reduce timeout for faster fallback
                 connectTimeoutMS=5000,
                 retryWrites=True
