@@ -377,31 +377,21 @@ async def process_message(session_id: str, message: str, websocket: WebSocket, c
     # Determine which agent to use based on conversation state
     agent_to_use = sales_agent  # Default to sales agent
     
-    # Get document and payment status (from DB or memory)
-    doc_pending = False
+    # Get payment status (from DB or memory)
     payment_pending = False
     
     if DB_AVAILABLE:
         user_data = UserProfile.get_by_session(session_id)
         if user_data:
-            if "document" in user_data:
-                doc_pending = user_data["document"].get("pending", False)
             if "payment" in user_data:
                 payment_pending = user_data["payment"].get("pending", False)
     else:
         # Use in-memory storage
-        if session_id in document_status:
-            doc_pending = document_status[session_id].get("pending", False)
         if session_id in payment_status:
             payment_pending = payment_status[session_id].get("pending", False)
     
-    # If we're at the document verification stage
-    if doc_pending:
-        agent_to_use = document_verification_agent
-        logger.info(f"Using document verification agent for session {session_id}")
-    
     # If we're at the payment stage
-    elif payment_pending:
+    if payment_pending:
         # Check if this user has already completed payment with another session/device
         if payment_already_completed:
             # User already paid, no need to show payment page again
@@ -481,12 +471,6 @@ async def process_message(session_id: str, message: str, websocket: WebSocket, c
                     serializable_data = mongo_to_json_serializable(user_info_data)
                     context += f"\nUser info: {json.dumps(serializable_data)}"
                 
-                # Add document status
-                if "document" in user_data:
-                    # Convert MongoDB data to JSON serializable format
-                    serializable_doc = mongo_to_json_serializable(user_data['document'])
-                    context += f"\nDocument status: {json.dumps(serializable_doc)}"
-                
                 # Add payment status
                 if "payment" in user_data:
                     # Convert MongoDB data to JSON serializable format
@@ -496,18 +480,13 @@ async def process_message(session_id: str, message: str, websocket: WebSocket, c
             # Use in-memory storage
             if session_id in user_info:
                 context += f"\nUser info: {json.dumps(user_info[session_id])}"
-            
-            if session_id in document_status:
-                context += f"\nDocument status: {json.dumps(document_status[session_id])}"
                 
             if session_id in payment_status:
                 context += f"\nPayment status: {json.dumps(payment_status[session_id])}"
         
         # Create the prompt with agent-specific instructions
         agent_type = "sales"
-        if doc_pending:
-            agent_type = "document verification"
-        elif payment_pending:
+        if payment_pending:
             agent_type = "payment"
         
         # Determine language preference from conversation or user data
@@ -523,7 +502,7 @@ async def process_message(session_id: str, message: str, websocket: WebSocket, c
             if user_data and "short_context" in user_data and "Lang: Hinglish" in user_data["short_context"]:
                 language_preference = "Hinglish"
             
-        # Prepare tool parameters for document verification and payment agents
+        # Prepare tool parameters for payment agent
         tool_params = {}
         
         # For payment agent, include payment info
@@ -544,25 +523,6 @@ async def process_message(session_id: str, message: str, websocket: WebSocket, c
                         tool_params["payment_id"] = payment_info["payment_id"]
                     if "link" in payment_info:
                         tool_params["payment_link"] = payment_info["link"]
-            
-        # For document agent, include document info
-        if agent_type == "document verification":
-            if DB_AVAILABLE:
-                user_data = UserProfile.get_by_session(session_id)
-                if user_data and "document" in user_data:
-                    doc_info = user_data["document"]
-                    if "file_path" in doc_info:
-                        tool_params["document_path"] = doc_info["file_path"]
-                    if "analysis" in doc_info:
-                        tool_params["analysis"] = doc_info["analysis"]
-            else:
-                # Use in-memory storage
-                if session_id in document_status:
-                    doc_info = document_status[session_id]
-                    if "file_path" in doc_info:
-                        tool_params["document_path"] = doc_info["file_path"]
-                    if "analysis" in doc_info:
-                        tool_params["analysis"] = doc_info["analysis"]
         
         # Get or create thread ID for this session
         thread_id = None
@@ -624,7 +584,6 @@ If language preference is Hinglish, respond in conversational Hindi-English mixe
         await send_bot_message(websocket, response)
         
         # Check if the agent used any tools
-        document_upload_requested = False
         payment_link_requested = False
         payment_status_check_requested = False
         
@@ -636,22 +595,8 @@ If language preference is Hinglish, respond in conversational Hindi-English mixe
             if isinstance(tools_called, list):
                 for tool_call in tools_called:
                     if isinstance(tool_call, dict):
-                        # Document upload tool
-                        if tool_call.get('name') == 'upload_document':
-                            document_upload_requested = True
-                            # Request document upload
-                            await request_document_upload(websocket)
-                            
-                            # Update document status in DB or memory
-                            if DB_AVAILABLE:
-                                UserProfile.update_document_info(session_id, {"pending": True})
-                            else:
-                                document_status[session_id] = {"pending": True}
-                                
-                            logger.info(f"Requested document upload for session {session_id} via tool call")
-                        
                         # Payment link generation tool
-                        elif tool_call.get('name') == 'create_payment_link':
+                        if tool_call.get('name') == 'create_payment_link':
                             payment_link_requested = True
                             
                             # Get customer info from tool arguments or database
@@ -685,7 +630,7 @@ If language preference is Hinglish, respond in conversational Hindi-English mixe
                                 else:
                                     payment_status[session_id] = payment_data_to_store
                                 
-                                # Send payment link to client
+                                # Send payment link to client (only popup, not in message)
                                 await send_payment_link(websocket, payment_data["payment_link"])
                                 logger.info(f"Payment link sent to client: {payment_data['payment_link']}")
                             else:
@@ -740,48 +685,6 @@ If language preference is Hinglish, respond in conversational Hindi-English mixe
                                     logger.error(f"Failed to check payment status: {payment_result.get('error', 'Unknown error')}")
                             else:
                                 logger.warning(f"No payment ID found for session {session_id}")
-        
-        # Fallback: Also check for document-related keywords in the response text
-        if not document_upload_requested and any(keyword in response.lower() for keyword in [
-            "upload your document", "send your document", "need your document",
-            "upload your id", "upload id", "upload proof", "address proof",
-            "identity proof", "upload your address", "document verification"
-        ]):
-            # Request document upload
-            await request_document_upload(websocket)
-            
-            # Update document status in DB or memory
-            if DB_AVAILABLE:
-                UserProfile.update_document_info(session_id, {"pending": True})
-            else:
-                document_status[session_id] = {"pending": True}
-                
-            logger.info(f"Requested document upload for session {session_id}")
-            
-        elif "payment link" in response.lower() and any(link_text in response.lower() for link_text in ["rzp.io", "http", "pay now"]):
-            # Extract payment link with regex
-            import re
-            pattern = r'https?://\S+'
-            matches = re.findall(pattern, response)
-            
-            if matches:
-                payment_link = matches[0]
-                
-                # Clean up the link if it has trailing punctuation
-                if payment_link[-1] in ['.', ',', ')', ']', '"', "'"]:
-                    payment_link = payment_link[:-1]
-                
-                # Send payment link to client
-                await send_payment_link(websocket, payment_link)
-                
-                # Update payment status in DB or memory
-                payment_data = {"pending": True, "link": payment_link}
-                if DB_AVAILABLE:
-                    UserProfile.update_payment_info(session_id, payment_data)
-                else:
-                    payment_status[session_id] = payment_data
-                    
-                logger.info(f"Sent payment link to session {session_id}: {payment_link}")
         
         # Extract and store user info if detected in the conversation
         # This is a simple heuristic approach for the MVP
