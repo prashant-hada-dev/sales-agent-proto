@@ -483,9 +483,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 // If amount is already in paise (>1000), use it directly, otherwise multiply by 100
                 amount = paymentDetails?.amount || 500000; // Default to ₹5,000 in paise if not available
                 
-                // If amount is in rupees (e.g. 5000 meaning ₹5,000), convert to paise (500000)
-                if (amount < 1000) {
+                // Razorpay expects amount in paise (1 rupee = 100 paise)
+                // Convert to paise if not already (assume below 10,000 is rupees)
+                if (amount < 10000) {
                     amount = amount * 100;
+                    updateDebug(`Converting amount from rupees to paise: ₹${amount/100} (${amount} paise)`);
                 }
                 
                 description = paymentDetails?.description || 'Company Registration';
@@ -536,24 +538,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         addMessage("I'll complete the payment later.", 'user');
                     }
                 },
-                config: {
-                    display: {
-                        blocks: {
-                            utib: { // UPI payment block
-                                name: "Pay using UPI",
-                                instruments: [
-                                    {
-                                        method: "upi"
-                                    }
-                                ]
-                            }
-                        },
-                        sequence: ["block.utib"],
-                        preferences: {
-                            show_default_blocks: false
-                        }
-                    }
-                }
+                // Enable all payment methods
+                // No specific config means all payment options are shown
             };
             
             // Create and open Razorpay checkout

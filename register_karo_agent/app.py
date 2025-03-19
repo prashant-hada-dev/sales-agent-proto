@@ -1813,17 +1813,22 @@ async def check_payment_endpoint(payment_id: str, session_id: str, cookie_id: st
     try:
         payment_result = check_payment_status(payment_id)
         
-        # Update payment status in DB or memory
+        # Create comprehensive payment update with all relevant details
         payment_update = {
             "status": payment_result["status"],
-            "checked_at": datetime.now().isoformat()
+            "checked_at": datetime.now().isoformat(),
+            "payment_id": payment_id,
+            "amount": payment_result.get("amount", 5000),
+            "currency": payment_result.get("currency", "INR"),
+            "payment_mode": payment_result.get("payment_mode", "unknown"),
+            "transaction_details": payment_result
         }
         
         if payment_result["payment_completed"]:
             payment_update.update({
                 "pending": False,
                 "completed": True,
-                "payment_id": payment_id
+                "completed_at": datetime.now().isoformat()
             })
             
             # Mark case as won in the database
@@ -1842,26 +1847,78 @@ async def check_payment_endpoint(payment_id: str, session_id: str, cookie_id: st
             # Notify the user via WebSocket if connected
             if actual_session_id in active_connections:
                 websocket = active_connections[actual_session_id]
-                success_message = "Fantastic news! Your payment has been successfully received. We've already started processing your company registration. You'll receive a confirmation email shortly with all the details. Thank you for choosing RegisterKaro for your company incorporation needs!"
+                # Get company type from database or memory
+                company_type = "private limited"  # Default
+                
+                if DB_AVAILABLE:
+                    user_data = UserProfile.get_by_session(actual_session_id)
+                    if user_data:
+                        company_type = user_data.get("company_type", "").lower()
+                else:
+                    if actual_session_id in user_info:
+                        company_type = user_info[actual_session_id].get("company_type", "").lower()
+                
+                # Determine document requirements based on company type
+                doc_requirements = {}
+                if "llp" in company_type:
+                    doc_requirements = {
+                        "identity_proof": ["Aadhaar Card", "PAN Card", "Passport"],
+                        "address_proof": ["Utility Bill", "Bank Statement", "Rent Agreement"],
+                        "business_proof": ["LLP Agreement", "Proposed Business Address Proof"]
+                    }
+                elif "opc" in company_type:
+                    doc_requirements = {
+                        "identity_proof": ["Aadhaar Card", "PAN Card", "Passport"],
+                        "address_proof": ["Utility Bill", "Bank Statement", "Rent Agreement"],
+                        "business_proof": ["Director's ID Proof", "NOC from Owner"]
+                    }
+                else:  # Private Limited
+                    doc_requirements = {
+                        "identity_proof": ["Aadhaar Card", "PAN Card", "Passport"],
+                        "address_proof": ["Utility Bill", "Bank Statement", "Rent Agreement"],
+                        "business_proof": ["Director's ID Proof", "Registered Office Proof"]
+                    }
+                
+                # Store document requirements in user profile
+                if DB_AVAILABLE:
+                    UserProfile.create_or_update(actual_session_id, {"doc_requirements": doc_requirements})
+                else:
+                    if actual_session_id not in user_info:
+                        user_info[actual_session_id] = {}
+                    user_info[actual_session_id]["doc_requirements"] = doc_requirements
+                
+                # Create payment success message
+                success_message = "Fantastic news! Your payment has been successfully received. We've already started processing your company registration. Our team will contact you shortly for the next steps. Thank you for choosing RegisterKaro for your company incorporation needs!"
+                
+                # Add document request message
+                doc_message = f"\n\nNow we need to collect some important documents for your {company_type.upper()} registration process that are required by MCA. Please have the following ready to upload:\n\n"
+                
+                for doc_type, examples in doc_requirements.items():
+                    doc_message += f"- {doc_type.replace('_', ' ').title()}: {', '.join(examples[:2])} or similar document\n"
+                
+                doc_message += "\nShould I guide you through the document upload process now, or would you prefer to do this later?"
+                
+                # Combined message
+                full_message = success_message + doc_message
                 
                 # Add to chat history
                 if DB_AVAILABLE:
                     UserProfile.add_message_to_conversation(
-                        actual_session_id, 
+                        actual_session_id,
                         {
-                            "role": "assistant", 
-                            "content": success_message,
-                            "metadata": {"type": "payment_confirmation"}
+                            "role": "assistant",
+                            "content": full_message,
+                            "metadata": {"type": "payment_confirmation_with_docs"}
                         }
                     )
                 else:
                     chat_histories[actual_session_id].append({
                         "role": "assistant",
-                        "content": success_message,
-                        "metadata": {"type": "payment_confirmation"}
+                        "content": full_message,
+                        "metadata": {"type": "payment_confirmation_with_docs"}
                     })
                 
-                await send_bot_message(websocket, success_message)
+                await send_bot_message(websocket, full_message)
         
         return payment_result
     except Exception as e:

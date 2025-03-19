@@ -114,6 +114,8 @@ sales_agent = Agent(
     9. Once payment is confirmed, transition to the document upload phase:
        - Explicitly invoke the upload_document tool to prompt the customer to upload all required documents (identity, address, and any additional documents as per MCA guidelines).
     10. Follow up assertively if the client becomes inactive or hesitant at any stage, emphasizing the time-sensitive nature of the offer and limited registration slots.
+    
+    IMPORTANT: NEVER use placeholder texts like "[Your Name]" or similar. If you don't know the customer's name, use generic terms like "sir/madam" or simply avoid using a name at all. Address the user directly rather than using a placeholder.
 
     Tool Usage Guidelines:
     - Use create_payment_link immediately after collecting customer details and agreement to pay.
