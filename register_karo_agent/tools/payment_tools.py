@@ -37,17 +37,17 @@ def generate_razorpay_link(customer_info: Dict[str, Any] = None) -> Dict[str, An
         if customer_info and customer_info.get("company_type"):
             company_type = customer_info.get("company_type", "").lower()
             if "llp" in company_type:
-                amount = 5  # Changed from 6000 to 5 rupees
+                amount = 6000  # LLP Registration amount
                 description = "Limited Liability Partnership (LLP) Registration"
             elif "opc" in company_type or "one person" in company_type:
-                amount = 5  # Changed from 4500 to 5 rupees
+                amount = 4500  # OPC Registration amount
                 description = "One Person Company (OPC) Registration"
             else:
-                amount = 5  # Changed from 5000 to 5 rupees
+                amount = 5000  # Private Limited Company Registration amount
                 description = "Private Limited Company Registration"
         else:
             # Default to Private Limited Company
-            amount = 5  # Changed from 5000 to 5 rupees
+            amount = 5000  # Default to Private Limited Company amount
             description = "Private Limited Company Registration"
         
         # Try to use actual Razorpay SDK if available
@@ -180,7 +180,7 @@ def check_payment_status(payment_id: str) -> Dict[str, Any]:
                         "payment_id": payment_id,
                         "status": status,
                         "payment_completed": payment_completed,
-                        "amount": 5,  # Changed from 5000 to 5 rupees
+                        "amount": 5000,  # Private Limited Company amount
                         "currency": "INR"
                     }
                     
@@ -216,7 +216,7 @@ def check_payment_status(payment_id: str) -> Dict[str, Any]:
             "payment_id": payment_id,
             "status": status,
             "payment_completed": payment_completed,
-            "amount": 5,  # Changed from 5000 to 5 rupees
+            "amount": 5000,  # Private Limited Company amount as default
             "currency": "INR"
         }
         
