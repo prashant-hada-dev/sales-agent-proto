@@ -357,13 +357,30 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function showPaymentLink(link) {
-        // Extract the payment ID from the link URL
-        const paymentId = link.split('/').pop();
+        // Sanitize and log the link
+        link = link ? link.trim() : '';
+        updateDebug(`Raw payment link received: ${link}`);
+        
+        // Extract the payment ID from the link URL or use the link directly
+        let paymentId = '';
+        if (link.includes('/')) {
+            paymentId = link.split('/').pop();
+        } else {
+            paymentId = link;
+        }
+        
+        updateDebug(`Payment ID before sanitization: ${paymentId}`);
+        
+        // Create a safe payment ID for both display and API usage
+        // We keep only allowed characters for URLs and IDs
+        const safePaymentId = paymentId.replace(/[^a-zA-Z0-9_-]/g, '');
+        
+        updateDebug(`Sanitized payment ID: ${safePaymentId}`);
         
         // Store the payment ID and link for later use
-        paymentLink.dataset.paymentId = paymentId;
+        paymentLink.dataset.paymentId = safePaymentId;
         paymentLink.dataset.originalLink = link;
-        paymentLink.href = link;
+        paymentLink.href = "#"; // Use # to prevent navigation, we'll handle in click event
         
         // Display the payment area
         paymentArea.style.display = 'block';
@@ -403,72 +420,151 @@ document.addEventListener('DOMContentLoaded', function() {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // Initialize Razorpay checkout
-    function openRazorpayCheckout(paymentId) {
+    // Initialize Razorpay checkout with dynamic payment details
+    async function openRazorpayCheckout(paymentId) {
         // Add a message showing that payment is being initialized
         addMessage("Opening secure payment gateway...", 'bot');
         
-        // Use the Razorpay test key
-        const razorpayKey = 'rzp_test_I98HfDwdi2qQ3T';
+        // Check if Razorpay is available
+        if (typeof Razorpay === 'undefined') {
+            updateDebug("Razorpay SDK not loaded");
+            addMessage("Our payment system is currently loading. Please try again in a few seconds.", 'bot');
+            
+            // Try to load Razorpay dynamically
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.async = true;
+            script.onload = function() {
+                updateDebug("Razorpay SDK loaded dynamically");
+                // Try again after loading
+                setTimeout(() => openRazorpayCheckout(paymentId), 1000);
+            };
+            script.onerror = function() {
+                updateDebug("Failed to load Razorpay SDK dynamically");
+                addMessage("There was an issue loading our payment system. Please try again or contact support.", 'bot');
+            };
+            document.head.appendChild(script);
+            return;
+        }
         
-        // Get customer information if available (using defaults if not)
-        const options = {
-            key: razorpayKey,
-            amount: 500, // Amount in paise (₹5)
-            currency: 'INR',
-            name: 'RegisterKaro',
-            description: 'Private Limited Company Registration',
-            image: 'https://ui-avatars.com/api/?name=RegisterKaro&background=0047ab&color=fff',
-            order_id: '', // Leave blank for our simulated environment
-            handler: function (response) {
-                // Payment successful
-                addMessage("Payment successful! Your transaction ID is: " + response.razorpay_payment_id, 'user');
+        updateDebug(`Starting Razorpay checkout for payment ID: ${paymentId}`);
+        
+        try {
+            // Encode the payment ID to make it URL-safe
+            const encodedPaymentId = encodeURIComponent(paymentId);
+            updateDebug(`Using encoded payment ID: ${encodedPaymentId}`);
+            
+            // Fetch payment details from server
+            const currentSessionId = serverSessionId || sessionId;
+            let url = `/payment-details/${encodedPaymentId}?session_id=${encodeURIComponent(currentSessionId)}`;
+            
+            // Add cookie ID if available
+            if (cookieId) {
+                url += `&cookie_id=${encodeURIComponent(cookieId)}`;
+            }
+            
+            updateDebug(`Fetching payment details from: ${url}`);
+            
+            let amount, description, currency;
+            
+            try {
+                const response = await fetch(url);
                 
-                // Check payment status on server
-                checkPaymentStatus(paymentId);
-                
-                // Close the payment area
-                closePaymentArea();
-            },
-            prefill: {
-                name: 'Test User',
-                email: 'test@example.com',
-                contact: '9999999999'
-            },
-            notes: {
-                payment_id: paymentId
-            },
-            theme: {
-                color: '#0047AB'
-            },
-            modal: {
-                ondismiss: function() {
-                    addMessage("I'll complete the payment later.", 'user');
+                if (!response.ok) {
+                    updateDebug(`Server error: ${response.status} ${response.statusText}`);
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
                 }
-            },
-            config: {
-                display: {
-                    blocks: {
-                        utib: { // UPI payment block
-                            name: "Pay using UPI",
-                            instruments: [
-                                {
-                                    method: "upi"
-                                }
-                            ]
+                
+                const paymentDetails = await response.json();
+                updateDebug(`Payment details received: ${JSON.stringify(paymentDetails)}`);
+                
+                // Get proper amount from payment details or use default
+                // Ensure amount is in paise (Razorpay expects amount in paise)
+                // If amount is already in paise (>1000), use it directly, otherwise multiply by 100
+                amount = paymentDetails?.amount || 500000; // Default to ₹5,000 in paise if not available
+                
+                // If amount is in rupees (e.g. 5000 meaning ₹5,000), convert to paise (500000)
+                if (amount < 1000) {
+                    amount = amount * 100;
+                }
+                
+                description = paymentDetails?.description || 'Company Registration';
+                currency = paymentDetails?.currency || 'INR';
+                
+                updateDebug(`Configuring Razorpay with amount: ${amount} paise (₹${amount/100})`);
+            } catch (error) {
+                updateDebug(`Error fetching payment details: ${error.message}`);
+                addMessage("There was an issue retrieving payment details. Please try again or contact support.", 'bot');
+                return; // Exit the function on error
+            }
+            
+            // Use the Razorpay test key
+            const razorpayKey = 'rzp_test_I98HfDwdi2qQ3T';
+            
+            // Configure Razorpay options with dynamic details
+            const options = {
+                key: razorpayKey,
+                amount: amount,
+                currency: currency,
+                name: 'RegisterKaro',
+                description: description,
+                image: 'https://ui-avatars.com/api/?name=RegisterKaro&background=0047ab&color=fff',
+                order_id: '', // Leave blank for our simulated environment
+                handler: function (response) {
+                    // Payment successful
+                    addMessage("Payment successful! Your transaction ID is: " + response.razorpay_payment_id, 'user');
+                    
+                    // Check payment status on server
+                    checkPaymentStatus(paymentId);
+                    
+                    // Close the payment area
+                    closePaymentArea();
+                },
+                prefill: {
+                    name: 'Test User',
+                    email: 'test@example.com',
+                    contact: '9999999999'
+                },
+                notes: {
+                    payment_id: paymentId
+                },
+                theme: {
+                    color: '#0047AB'
+                },
+                modal: {
+                    ondismiss: function() {
+                        addMessage("I'll complete the payment later.", 'user');
+                    }
+                },
+                config: {
+                    display: {
+                        blocks: {
+                            utib: { // UPI payment block
+                                name: "Pay using UPI",
+                                instruments: [
+                                    {
+                                        method: "upi"
+                                    }
+                                ]
+                            }
+                        },
+                        sequence: ["block.utib"],
+                        preferences: {
+                            show_default_blocks: false
                         }
-                    },
-                    sequence: ["block.utib"],
-                    preferences: {
-                        show_default_blocks: false
                     }
                 }
-            }
-        };
-        
-        // Create and open Razorpay checkout
-        const razorpayCheckout = new Razorpay(options);
-        razorpayCheckout.open();
+            };
+            
+            // Create and open Razorpay checkout
+            const razorpayCheckout = new Razorpay(options);
+            razorpayCheckout.open();
+            
+        } catch (error) {
+            updateDebug(`Error initializing payment: ${error.message}`);
+            console.error('Error initializing payment:', error);
+            addMessage("There was an issue initializing payment. Please try again or contact support.", 'bot');
+        }
     }
 
     // Event Listeners
@@ -704,8 +800,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // Track that user clicked the payment link
         addMessage("I'm proceeding to make the payment now.", 'user');
         
-        // Get the payment ID from the data attribute
+        // Get the safe payment ID from the data attribute
         const paymentId = this.dataset.paymentId;
+        
+        // Log the payment ID we're using
+        updateDebug(`Using payment ID for checkout: ${paymentId}`);
         
         // Open the Razorpay checkout modal
         openRazorpayCheckout(paymentId);

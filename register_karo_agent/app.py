@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import re
 from bson import ObjectId
 import asyncio
 import logging
@@ -1681,9 +1682,87 @@ async def upload_document(
         logger.error(f"Error processing document: {str(e)}", exc_info=True)
         return {"success": False, "error": str(e)}
 
+@app.get("/payment-details/{payment_id}")
+async def payment_details_endpoint(payment_id: str, session_id: str, cookie_id: str = None, device_id: str = None):
+    """Endpoint to get payment details for Razorpay checkout."""
+    logger.info(f"Fetching payment details for: {payment_id}, session: {session_id}")
+    
+    # Sanitize the payment ID to ensure it's safe
+    payment_id = re.sub(r'[^a-zA-Z0-9_-]', '', payment_id)
+    logger.info(f"Sanitized payment ID: {payment_id}")
+    
+    # Identify user - try device ID first, then cookie, then session
+    user = None
+    actual_session_id = session_id
+    
+    if DB_AVAILABLE:
+        identifiers = {}
+        
+        # Use device ID as strongest identifier if provided
+        if device_id:
+            identifiers["device_id"] = device_id
+            
+        # Use cookie ID if provided
+        if cookie_id:
+            identifiers["cookie_id"] = cookie_id
+        
+        # Always include session ID as a fallback
+        identifiers["session_id"] = session_id
+        
+        # Try to find the user with the provided identifiers
+        user = UserProfile.find_user(identifiers)
+        
+        if not user:
+            logger.warning(f"No user found for payment details (session: {session_id}, cookie: {cookie_id})")
+            # Fall back to default payment details
+            return {
+                "amount": 5000,
+                "currency": "INR",
+                "description": "Private Limited Company Registration",
+                "status": "created"
+            }
+        
+        # Extract payment info from user data
+        if "payment" in user:
+            payment_info = user["payment"]
+            return {
+                "amount": payment_info.get("amount", 5000),
+                "currency": payment_info.get("currency", "INR"),
+                "description": payment_info.get("description", "Company Registration"),
+                "status": payment_info.get("status", "created")
+            }
+        else:
+            # No payment info found, use default
+            return {
+                "amount": 5000,
+                "currency": "INR",
+                "description": "Private Limited Company Registration",
+                "status": "created"
+            }
+    else:
+        # In-memory storage
+        if session_id in payment_status:
+            payment_info = payment_status[session_id]
+            return {
+                "amount": payment_info.get("amount", 5000),
+                "currency": payment_info.get("currency", "INR"),
+                "description": payment_info.get("description", "Company Registration"),
+                "status": payment_info.get("status", "created")
+            }
+        else:
+            # No payment info found, use default
+            return {
+                "amount": 5000,
+                "currency": "INR",
+                "description": "Private Limited Company Registration",
+                "status": "created"
+            }
+
 @app.get("/check-payment/{payment_id}")
 async def check_payment_endpoint(payment_id: str, session_id: str, cookie_id: str = None, device_id: str = None):
     """Endpoint to check payment status."""
+    # Sanitize the payment ID to ensure it's safe
+    payment_id = re.sub(r'[^a-zA-Z0-9_-]', '', payment_id)
     logger.info(f"Checking payment status for: {payment_id}, session: {session_id}")
     
     # Identify user - try device ID first, then cookie, then session
